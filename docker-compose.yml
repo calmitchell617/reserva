@@ -1,0 +1,24 @@
+services:
+  singlestore: 
+    environment:
+      - START_AFTER_INIT=Y
+      - LICENSE_KEY=${SINGLESTORE_LICENSE}
+      - ROOT_PASSWORD=${SINGLESTORE_PASSWORD}
+    image: singlestore/cluster-in-a-box:alma-7.8.17-69cee1f1a3-4.0.8-1.13.13
+    ports: 
+      - 3306:3306
+      - 8080:8080
+    container_name: singlestore
+  reserva:
+    container_name: reserva
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - singlestore
+      - redis
+    ports:
+      - 80:80
+  redis:
+    image: redis:7
+    container_name: redis
