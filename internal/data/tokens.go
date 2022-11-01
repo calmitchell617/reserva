@@ -6,9 +6,11 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base32"
+	"fmt"
 	"time"
 
 	"github.com/calmitchell617/reserva/internal/validator"
+	"github.com/go-redis/redis/v8"
 )
 
 const (
@@ -18,18 +20,18 @@ const (
 )
 
 type Token struct {
-	Plaintext string    `json:"token"`
-	Hash      []byte    `json:"-"`
-	BankID    int64     `json:"-"`
-	Expiry    time.Time `json:"expiry"`
-	Scope     string    `json:"-"`
+	Plaintext    string    `json:"token"`
+	Hash         []byte    `json:"-"`
+	BankUsername string    `json:"-"`
+	Expiry       time.Time `json:"expiry"`
+	Admin        bool      `json:"-"`
 }
 
-func generateToken(bankID int64, ttl time.Duration, scope string) (*Token, error) {
+func generateToken(bank *Bank, ttl time.Duration, scope string) (*Token, error) {
 	token := &Token{
-		BankID: bankID,
-		Expiry: time.Now().Add(ttl),
-		Scope:  scope,
+		BankUsername: bank.Username,
+		Expiry:       time.Now().Add(ttl),
+		Admin:        bank.Admin,
 	}
 
 	randomBytes := make([]byte, 16)
@@ -53,11 +55,12 @@ func ValidateTokenPlaintext(v *validator.Validator, tokenPlaintext string) {
 }
 
 type TokenModel struct {
-	Db *sql.DB
+	Db    *sql.DB
+	Cache *redis.Client
 }
 
-func (m TokenModel) New(bankID int64, ttl time.Duration, scope string) (*Token, error) {
-	token, err := generateToken(bankID, ttl, scope)
+func (m TokenModel) New(bank *Bank, ttl time.Duration, scope string) (*Token, error) {
+	token, err := generateToken(bank, ttl, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -67,27 +70,51 @@ func (m TokenModel) New(bankID int64, ttl time.Duration, scope string) (*Token, 
 }
 
 func (m TokenModel) Insert(token *Token) error {
-	query := `
-        INSERT INTO tokens (hash, bank_id, expiry, scope) 
-        VALUES ($1, $2, $3, $4)`
-
-	args := []interface{}{token.Hash, token.BankID, token.Expiry, token.Scope}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	_, err := m.Db.ExecContext(ctx, query, args...)
-	return err
+	tokenKey := fmt.Sprintf("tokens/%v", string(token.Hash))
+
+	err := m.Cache.HSet(
+		ctx,
+		tokenKey,
+		map[string]interface{}{
+			"username": token.BankUsername,
+			"expiry":   token.Expiry.Format(time.RFC3339),
+			"admin":    token.Admin,
+		},
+	).Err()
+	if err != nil {
+		return fmt.Errorf("unable to insert into token cache, err: %v", err)
+	}
+
+	err = m.Cache.ExpireAt(ctx, tokenKey, token.Expiry).Err()
+	if err != nil {
+		return fmt.Errorf("unable to set token expiry, err: %v", err)
+	}
+	return nil
 }
 
-func (m TokenModel) DeleteAllForBank(scope string, bankID int64) error {
-	query := `
-        DELETE FROM tokens 
-        WHERE scope = $1 AND bank_id = $2`
+// func (m TokenModel) DeleteAllForBank(bankUsername string) error {
+// 	query := `
+//         DELETE FROM tokens
+//         WHERE scope = $1 AND bank_id = $2`
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+// 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+// 	defer cancel()
 
-	_, err := m.Db.ExecContext(ctx, query, scope, bankID)
-	return err
-}
+// 	_, err := m.Db.ExecContext(ctx, query, scope, bankID)
+// 	return err
+// }
+
+// func (m TokenModel) CheckAdminToken(token string) (bool, error) {
+// 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+// 	defer cancel()
+
+// 	adminToken, err := m.Cache.Get(ctx, "admin-token").Result()
+// 	if err != nil {
+// 		return false, err
+// 	}
+
+// 	return adminToken == fmt.Sprint(sha256.Sum256([]byte(token))), nil
+// }

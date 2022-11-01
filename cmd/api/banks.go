@@ -3,36 +3,15 @@ package main
 import (
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/calmitchell617/reserva/internal/data"
 	"github.com/calmitchell617/reserva/internal/validator"
 )
 
-func (app *application) showBankHandler(w http.ResponseWriter, r *http.Request) {
-	requestingBank := app.contextGetBank(r)
-
-	bank, err := app.models.Banks.GetByEmail(requestingBank.Email)
-	if err != nil {
-		switch {
-		case errors.Is(err, data.ErrRecordNotFound):
-			app.notFoundResponse(w, r)
-		default:
-			app.serverErrorResponse(w, r, err)
-		}
-		return
-	}
-
-	err = app.writeJSON(w, http.StatusOK, envelope{"bank": bank}, nil)
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
-	}
-}
-
 func (app *application) registerBankHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Name     string `json:"name"`
-		Email    string `json:"email"`
+		Username string `json:"username"`
+		Admin    bool   `json:"admin"`
 		Password string `json:"password"`
 	}
 
@@ -43,9 +22,8 @@ func (app *application) registerBankHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	bank := &data.Bank{
-		Name:      input.Name,
-		Email:     input.Email,
-		Activated: false,
+		Username: input.Username,
+		Admin:    input.Admin,
 	}
 
 	err = bank.Password.Set(input.Password)
@@ -64,32 +42,14 @@ func (app *application) registerBankHandler(w http.ResponseWriter, r *http.Reque
 	err = app.models.Banks.Insert(bank)
 	if err != nil {
 		switch {
-		case errors.Is(err, data.ErrDuplicateEmail):
-			v.AddError("email", "a bank with this email address already exists")
+		case errors.Is(err, data.ErrDuplicateUsername):
+			v.AddError("username", "a bank with this username already exists")
 			app.failedValidationResponse(w, r, v.Errors)
 		default:
 			app.serverErrorResponse(w, r, err)
 		}
 		return
 	}
-
-	token, err := app.models.Tokens.New(bank.Id, 3*24*time.Hour, data.ScopeActivation)
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
-	}
-
-	app.background(func() {
-		data := map[string]interface{}{
-			"activationToken": token.Plaintext,
-			"bankID":          bank.Id,
-		}
-
-		err = app.mailer.Send(bank.Email, "bank_welcome.tmpl", data)
-		if err != nil {
-			app.logger.PrintError(err, nil)
-		}
-	})
 
 	err = app.writeJSON(w, http.StatusAccepted, envelope{"bank": bank}, nil)
 	if err != nil {
@@ -97,52 +57,30 @@ func (app *application) registerBankHandler(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-func (app *application) activateBankHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) showBankHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		TokenPlaintext string `json:"token"`
+		Username string
 	}
 
-	err := app.readJSON(w, r, &input)
-	if err != nil {
-		app.badRequestResponse(w, r, err)
+	qs := r.URL.Query()
+
+	input.Username = app.readString(qs, "username", "")
+
+	requestingBank := app.contextGetBank(r)
+
+	if !requestingBank.Admin && requestingBank.Username != input.Username {
+		app.notPermittedResponse(w, r)
 		return
 	}
 
-	v := validator.New()
-
-	if data.ValidateTokenPlaintext(v, input.TokenPlaintext); !v.Valid() {
-		app.failedValidationResponse(w, r, v.Errors)
-		return
-	}
-
-	bank, err := app.models.Banks.GetForToken(data.ScopeActivation, input.TokenPlaintext)
+	bank, err := app.models.Banks.GetByUsername(input.Username)
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrRecordNotFound):
-			v.AddError("token", "invalid or expired activation token")
-			app.failedValidationResponse(w, r, v.Errors)
+			app.notFoundResponse(w, r)
 		default:
 			app.serverErrorResponse(w, r, err)
 		}
-		return
-	}
-
-	bank.Activated = true
-
-	err = app.models.Banks.Update(bank)
-	if err != nil {
-		switch {
-		case errors.Is(err, data.ErrEditConflict):
-			app.editConflictResponse(w, r)
-		default:
-			app.serverErrorResponse(w, r, err)
-		}
-		return
-	}
-
-	err = app.models.Tokens.DeleteAllForBank(data.ScopeActivation, bank.Id)
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
 		return
 	}
 
@@ -174,7 +112,7 @@ func (app *application) updateBankPasswordHandler(w http.ResponseWriter, r *http
 		return
 	}
 
-	bank, err := app.models.Banks.GetForToken(data.ScopePasswordReset, input.TokenPlaintext)
+	bank, err := app.models.Banks.GetByToken(data.ScopePasswordReset, input.TokenPlaintext)
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrRecordNotFound):
@@ -203,11 +141,11 @@ func (app *application) updateBankPasswordHandler(w http.ResponseWriter, r *http
 		return
 	}
 
-	err = app.models.Tokens.DeleteAllForBank(data.ScopePasswordReset, bank.Id)
-	if err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
-	}
+	// err = app.models.Tokens.DeleteAllForBank(data.ScopePasswordReset, bank.Id)
+	// if err != nil {
+	// 	app.serverErrorResponse(w, r, err)
+	// 	return
+	// }
 
 	env := envelope{"message": "your password was successfully reset"}
 

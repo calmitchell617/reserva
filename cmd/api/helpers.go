@@ -17,15 +17,14 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
-func (app *application) readIDParam(r *http.Request) (int64, error) {
+func (app *application) readUsernameParam(r *http.Request) (string, error) {
 	params := httprouter.ParamsFromContext(r.Context())
 
-	id, err := strconv.ParseInt(params.ByName("id"), 10, 64)
-	if err != nil || id < 1 {
-		return 0, errors.New("invalid id parameter")
+	username := params.ByName("username")
+	if username == "" {
+		return "", errors.New("username not present in query params")
 	}
-
-	return id, nil
+	return username, nil
 }
 
 type envelope map[string]interface{}

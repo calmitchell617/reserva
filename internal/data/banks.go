@@ -5,36 +5,35 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/calmitchell617/reserva/internal/validator"
-)
-
-var (
-	ErrDuplicateEmail = errors.New("duplicate email")
+	"github.com/calmitchell617/reserva/pkg"
+	"github.com/go-redis/redis/v8"
 )
 
 var AnonymousBank = &Bank{}
+var Admin = &Bank{}
+
+var (
+	ErrDuplicateUsername = errors.New("duplicate username")
+)
 
 type Bank struct {
-	Id             int64    `json:"id"`
-	Name           string   `json:"name"`
-	Email          string   `json:"email"`
+	Username       string   `json:"username"`
+	Admin          bool     `json:"admin"`
 	Password       password `json:"-"`
 	BalanceInCents int64    `json:"balance_in_cents"`
-	Activated      bool     `json:"activated"`
 	Frozen         bool     `json:"frozen"`
 	Version        int64    `json:"-"`
 }
 
 func (u *Bank) IsAnonymous() bool {
 	return u == AnonymousBank
-}
-
-func ValidateEmail(v *validator.Validator, email string) {
-	v.Check(email != "", "email", "must be provided")
-	v.Check(validator.Matches(email, validator.EmailRX), "email", "must be a valid email address")
 }
 
 func ValidatePasswordPlaintext(v *validator.Validator, password string) {
@@ -44,10 +43,9 @@ func ValidatePasswordPlaintext(v *validator.Validator, password string) {
 }
 
 func ValidateBank(v *validator.Validator, bank *Bank) {
-	v.Check(bank.Name != "", "name", "must be provided")
-	v.Check(utf8.RuneCountInString(bank.Name) <= 500, "name", "must not be more than 500 characters long")
-
-	ValidateEmail(v, bank.Email)
+	v.Check(bank.Username != "", "username", "must be provided")
+	v.Check(utf8.RuneCountInString(bank.Username) <= 32, "username", "must not be more than 32 characters long")
+	v.Check(pkg.IsAlphanumeric(bank.Username), "username", "must only contain alphanumeric characters - no spaces, special characters, or numbers")
 
 	if bank.Password.plaintext != nil {
 		ValidatePasswordPlaintext(v, *bank.Password.plaintext)
@@ -59,25 +57,25 @@ func ValidateBank(v *validator.Validator, bank *Bank) {
 }
 
 type BankModel struct {
-	Db *sql.DB
+	Db    *sql.DB
+	Cache *redis.Client
 }
 
 func (m BankModel) Insert(bank *Bank) error {
 	query := `
-        INSERT INTO banks (name, email, password_hash) 
-        VALUES ($1, $2, $3)
-        RETURNING id, version`
+        INSERT INTO banks (username, admin, password_hash) 
+        VALUES (?, ?, ?)`
 
-	args := []interface{}{bank.Name, bank.Email, bank.Password.hash}
+	args := []interface{}{bank.Username, bank.Admin, bank.Password.hash}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	err := m.Db.QueryRowContext(ctx, query, args...).Scan(&bank.Id, &bank.Version)
+	_, err := m.Db.ExecContext(ctx, query, args...)
 	if err != nil {
 		switch {
-		case err.Error() == `pq: duplicate key value violates unique constraint "banks_email_key"`:
-			return ErrDuplicateEmail
+		case strings.HasPrefix(err.Error(), "Error 1062"):
+			return ErrDuplicateUsername
 		default:
 			return err
 		}
@@ -86,32 +84,28 @@ func (m BankModel) Insert(bank *Bank) error {
 	return nil
 }
 
-func (m BankModel) GetByEmail(email string) (*Bank, error) {
+func (m BankModel) GetByUsername(username string) (*Bank, error) {
 	query := `
         SELECT
-					id,
-					name,
-					email,
+					username,
+					admin,
 					password_hash,
 					balance_in_cents,
-					activated,
 					frozen,
 					version
         FROM banks
-        WHERE email = $1`
+        WHERE username = ?`
 
 	var bank Bank
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	err := m.Db.QueryRowContext(ctx, query, email).Scan(
-		&bank.Id,
-		&bank.Name,
-		&bank.Email,
+	err := m.Db.QueryRowContext(ctx, query, username).Scan(
+		&bank.Username,
+		&bank.Admin,
 		&bank.Password.hash,
 		&bank.BalanceInCents,
-		&bank.Activated,
 		&bank.Frozen,
 		&bank.Version,
 	)
@@ -132,24 +126,20 @@ func (m BankModel) Update(bank *Bank) error {
 	query := `
         UPDATE banks 
         SET
-					name = $1,
-					email = $2,
-					password_hash = $3,
-					balance_in_cents = $4,
-					activated = $5,
-					frozen = $6,
+					admin = $1,
+					password_hash = $2,
+					balance_in_cents = $3,
+					frozen = $4,
 					version = version + 1
-        WHERE id = $7 AND version = $8
+        WHERE username = $5 AND version = $6
         RETURNING version`
 
 	args := []interface{}{
-		bank.Name,
-		bank.Email,
+		bank.Admin,
 		bank.Password.hash,
 		bank.BalanceInCents,
-		bank.Activated,
 		bank.Frozen,
-		bank.Id,
+		bank.Username,
 		bank.Version,
 	}
 
@@ -159,8 +149,6 @@ func (m BankModel) Update(bank *Bank) error {
 	err := m.Db.QueryRowContext(ctx, query, args...).Scan(&bank.Version)
 	if err != nil {
 		switch {
-		case err.Error() == `pq: duplicate key value violates unique constraint "banks_email_key"`:
-			return ErrDuplicateEmail
 		case errors.Is(err, sql.ErrNoRows):
 			return ErrEditConflict
 		default:
@@ -171,40 +159,78 @@ func (m BankModel) Update(bank *Bank) error {
 	return nil
 }
 
-func (m BankModel) GetForToken(tokenScope, tokenPlaintext string) (*Bank, error) {
-	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
+func (m BankModel) GetByToken(tokenScope, tokenPlaintext string) (*Bank, error) {
 
-	query := `
-        SELECT 
-					banks.id,
-					banks.name,
-					banks.email,
-					banks.password_hash,
-					banks.balance_in_cents,
-					banks.activated,
-					banks.frozen,
-					banks.version
-        FROM banks
-        INNER JOIN tokens
-        ON banks.id = tokens.bank_id
-        WHERE tokens.hash = $1
-        AND tokens.scope = $2 
-        AND tokens.expiry > $3`
-
-	args := []interface{}{tokenHash[:], tokenScope, time.Now()}
-
-	var bank Bank
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := m.Db.QueryRowContext(ctx, query, args...).Scan(
-		&bank.Id,
-		&bank.Name,
-		&bank.Email,
+	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
+	token := tokenHash[:]
+	tokenHashString := fmt.Sprintf("tokens/%v", string(token))
+
+	bankMap, err := m.Cache.HGetAll(ctx, tokenHashString).Result()
+	if err != nil {
+		switch {
+		case errors.Is(err, redis.Nil):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+
+	username, ok := bankMap["username"]
+	if !ok {
+		return nil, fmt.Errorf("bank username not stored in token hash")
+	}
+
+	adminString, ok := bankMap["admin"]
+	if !ok {
+		return nil, errors.New("bank admin status not stored in token hash")
+	}
+
+	admin, err := strconv.ParseBool(adminString)
+	if err != nil {
+		return nil, errors.New("unable to parse admin bool from cache token")
+	}
+
+	expiryString, ok := bankMap["expiry"]
+	if !ok {
+		return nil, fmt.Errorf("expiry not stored in token hash")
+	}
+
+	expiry, err := time.Parse(time.RFC3339, expiryString)
+	if err != nil {
+		return nil, errors.New("unable to parse expiry time from cache token")
+	}
+
+	// check if it expired
+	if expiry.Before(time.Now()) {
+		return nil, ErrRecordNotFound
+	}
+
+	bank := Bank{
+		Username: username,
+		Admin:    admin,
+	}
+
+	query := `
+		SELECT 
+			username,
+			admin,
+			password_hash,
+			balance_in_cents,
+			frozen,
+			version
+		FROM banks
+		WHERE username = ?`
+
+	args := []interface{}{bank.Username}
+
+	err = m.Db.QueryRowContext(ctx, query, args...).Scan(
+		&bank.Username,
+		&bank.Admin,
 		&bank.Password.hash,
 		&bank.BalanceInCents,
-		&bank.Activated,
 		&bank.Frozen,
 		&bank.Version,
 	)
@@ -215,6 +241,63 @@ func (m BankModel) GetForToken(tokenScope, tokenPlaintext string) (*Bank, error)
 		default:
 			return nil, err
 		}
+	}
+
+	return &bank, nil
+}
+
+func (m BankModel) GetByTokenForAuthentication(tokenScope, tokenPlaintext string) (*Bank, error) {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
+	token := tokenHash[:]
+	tokenHashString := fmt.Sprintf("tokens/%v", string(token))
+
+	bankMap, err := m.Cache.HGetAll(ctx, tokenHashString).Result()
+	if err != nil {
+		switch {
+		case errors.Is(err, redis.Nil):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+
+	username, ok := bankMap["username"]
+	if !ok {
+		return nil, fmt.Errorf("bank username not stored in token hash")
+	}
+
+	adminString, ok := bankMap["admin"]
+	if !ok {
+		return nil, errors.New("bank admin status not stored in token hash")
+	}
+
+	admin, err := strconv.ParseBool(adminString)
+	if err != nil {
+		return nil, errors.New("unable to parse admin bool from cache token")
+	}
+
+	expiryString, ok := bankMap["expiry"]
+	if !ok {
+		return nil, fmt.Errorf("expiry not stored in token hash")
+	}
+
+	expiry, err := time.Parse(time.RFC3339, expiryString)
+	if err != nil {
+		return nil, errors.New("unable to parse expiry time from cache token")
+	}
+
+	// check if it expired
+	if expiry.Before(time.Now()) {
+		return nil, ErrRecordNotFound
+	}
+
+	bank := Bank{
+		Username: username,
+		Admin:    admin,
 	}
 
 	return &bank, nil

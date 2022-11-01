@@ -112,7 +112,7 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		bank, err := app.models.Banks.GetForToken(data.ScopeAuthentication, token)
+		bank, err := app.models.Banks.GetByTokenForAuthentication(data.ScopeAuthentication, token)
 		if err != nil {
 			switch {
 			case errors.Is(err, data.ErrRecordNotFound):
@@ -142,12 +142,12 @@ func (app *application) requireAuthenticatedBank(next http.HandlerFunc) http.Han
 	})
 }
 
-func (app *application) requireActivatedBank(next http.HandlerFunc) http.HandlerFunc {
+func (app *application) requireUnfrozenBank(next http.HandlerFunc) http.HandlerFunc {
 	fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		bank := app.contextGetBank(r)
 
-		if !bank.Activated {
-			app.inactiveAccountResponse(w, r)
+		if bank.Frozen {
+			app.authenticationRequiredResponse(w, r)
 			return
 		}
 
@@ -155,6 +155,21 @@ func (app *application) requireActivatedBank(next http.HandlerFunc) http.Handler
 	})
 
 	return app.requireAuthenticatedBank(fn)
+}
+
+func (app *application) requireAdminBank(next http.HandlerFunc) http.HandlerFunc {
+	fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bank := app.contextGetBank(r)
+
+		if !bank.Admin {
+			app.notPermittedResponse(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+
+	return app.requireUnfrozenBank(fn)
 }
 
 func (app *application) enableCORS(next http.Handler) http.Handler {

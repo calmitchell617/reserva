@@ -3,6 +3,8 @@ package data
 import (
 	"database/sql"
 	"errors"
+
+	"github.com/go-redis/redis/v8"
 )
 
 var (
@@ -11,17 +13,17 @@ var (
 )
 
 type Models struct {
-	Tokens   TokenModel
-	Banks    BankModel
-	Accounts AccountModel
-	Cards    CardModel
+	Tokens TokenModel
+	Banks  BankModel
+	// Accounts AccountModel
+	Cards CardModel
 }
 
-func NewModels(db *sql.DB) Models {
+func NewModels(db *sql.DB, cache *redis.Client) Models {
 	return Models{
-		Tokens:   TokenModel{Db: db},
-		Banks:    BankModel{Db: db},
-		Accounts: AccountModel{Db: db},
-		Cards:    CardModel{Db: db},
+		Tokens: TokenModel{Db: db, Cache: cache},
+		Banks:  BankModel{Db: db, Cache: cache},
+		// Accounts: AccountModel{Db: db},
+		Cards: CardModel{Db: db},
 	}
 }

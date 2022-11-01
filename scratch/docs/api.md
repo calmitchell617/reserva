@@ -17,8 +17,7 @@ All routes require bearer token authentication unless otherwise noted.
   ```
   {
     "id": <number>,
-    "email": <string>,
-    "name": <string>,
+    "username": <string>,
     "balance_in_cents": <number>,
     "frozen": <boolean>
   }
@@ -31,7 +30,7 @@ All routes require bearer token authentication unless otherwise noted.
   ### ***Request***
   ```
   {
-    "email": <string>,
+    "username": <string>,
     "name": <string>
   }
   ```
@@ -40,30 +39,7 @@ All routes require bearer token authentication unless otherwise noted.
   ```
   {
     "id": <number>,
-    "email": <string>,
-    "name": <string>,
-    "balance_in_cents": <number>,
-    "frozen": <boolean>
-  }
-  ```
-
-### `/v1/banks/activated`
-- `PATCH`
-  - Activates the requesting bank.
-  - Bearer token not required. Client authenticates with a token that is delivered by email.
-
-  ### ***Request***
-  ```
-  {
-    "token": <string>
-  }
-  ```
-
-  ### ***Response***
-  ```
-  {
-    "id": <number>,
-    "email": <string>,
+    "username": <string>,
     "name": <string>,
     "balance_in_cents": <number>,
     "frozen": <boolean>
@@ -87,7 +63,7 @@ All routes require bearer token authentication unless otherwise noted.
   ```
   {
     "id": <number>,
-    "email": <string>,
+    "username": <string>,
     "name": <string>,
     "balance_in_cents": <number>,
     "frozen": <boolean>
@@ -111,31 +87,7 @@ All routes require bearer token authentication unless otherwise noted.
   ```
   {
     "id": <number>,
-    "email": <string>,
-    "name": <string>,
-    "balance_in_cents": <number>,
-    "frozen": <boolean>
-  }
-  ```
-
-### `/v1/banks/password`
-- `PATCH`
-  - Changes the requesting bank's password.
-  - Bearer token not required. Client authenticates with a token that is delivered by email.
-
-  ### ***Request***
-  ```
-  {
-    "password": <string>,
-    "token": <string>
-  }
-  ```
-
-  ### ***Response***
-  ```
-  {
-    "id": <number>,
-    "email": <string>,
+    "username": <string>,
     "name": <string>,
     "balance_in_cents": <number>,
     "frozen": <boolean>
