@@ -2,6 +2,7 @@ package pkg
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"math/big"
 	"regexp"
 )
@@ -88,4 +89,9 @@ func RandomCharacters(length int) (string, error) {
 
 func IsAlphanumeric(word string) bool {
 	return regexp.MustCompile(`^[a-zA-Z0-9]*$`).MatchString(word)
+}
+
+func IsJSON(str string) bool {
+	var js json.RawMessage
+	return json.Unmarshal([]byte(str), &js) == nil
 }

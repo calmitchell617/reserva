@@ -142,21 +142,6 @@ func (app *application) requireAuthenticatedBank(next http.HandlerFunc) http.Han
 	})
 }
 
-func (app *application) requireUnfrozenBank(next http.HandlerFunc) http.HandlerFunc {
-	fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		bank := app.contextGetBank(r)
-
-		if bank.Frozen {
-			app.authenticationRequiredResponse(w, r)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-
-	return app.requireAuthenticatedBank(fn)
-}
-
 func (app *application) requireAdminBank(next http.HandlerFunc) http.HandlerFunc {
 	fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		bank := app.contextGetBank(r)
@@ -169,7 +154,7 @@ func (app *application) requireAdminBank(next http.HandlerFunc) http.HandlerFunc
 		next.ServeHTTP(w, r)
 	})
 
-	return app.requireUnfrozenBank(fn)
+	return app.requireAuthenticatedBank(fn)
 }
 
 func (app *application) enableCORS(next http.Handler) http.Handler {

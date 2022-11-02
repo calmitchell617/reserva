@@ -1,192 +1,225 @@
 package main
 
-// import (
-// 	"errors"
-// 	"fmt"
-// 	"net/http"
+import (
+	"errors"
+	"fmt"
+	"net/http"
 
-// 	"github.com/calmitchell617/reserva/internal/data"
-// 	"github.com/calmitchell617/reserva/internal/validator"
-// )
+	"github.com/calmitchell617/reserva/internal/validator"
 
-// func (app *application) createAccountHandler(w http.ResponseWriter, r *http.Request) {
+	"github.com/calmitchell617/reserva/internal/data"
+)
 
-// 	requestingBank := app.contextGetBank(r)
+func (app *application) createAccountHandler(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		MetaData string `json:"metadata"`
+	}
 
-// 	account := &data.Account{
-// 		BankId: requestingBank.Id,
-// 	}
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
 
-// 	v := validator.New()
+	requestingBank := app.contextGetBank(r)
+	account := &data.Account{
+		Metadata:        input.MetaData,
+		ControllingBank: requestingBank.Username,
+	}
 
-// 	if data.ValidateAccount(v, account); !v.Valid() {
-// 		app.failedValidationResponse(w, r, v.Errors)
-// 		return
-// 	}
+	v := validator.New()
 
-// 	err := app.models.Accounts.Insert(account)
-// 	if err != nil {
-// 		app.serverErrorResponse(w, r, err)
-// 		return
-// 	}
+	if data.ValidateAccount(v, account); !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
 
-// 	headers := make(http.Header)
-// 	headers.Set("Location", fmt.Sprintf("/v1/accounts/%d", account.Id))
+	account.Id, err = app.models.Accounts.Insert(account)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
 
-// 	err = app.writeJSON(w, http.StatusCreated, envelope{"account": account}, headers)
-// 	if err != nil {
-// 		app.serverErrorResponse(w, r, err)
-// 	}
-// }
+	headers := make(http.Header)
+	headers.Set("Location", fmt.Sprintf("/v1/accounts/%d", account.Id))
 
-// func (app *application) showAccountHandler(w http.ResponseWriter, r *http.Request) {
-// 	id, err := app.readIDParam(r)
-// 	if err != nil {
-// 		app.notFoundResponse(w, r)
-// 		return
-// 	}
+	err = app.writeJSON(w, http.StatusCreated, envelope{"account": account}, headers)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
 
-// 	requestingBank := app.contextGetBank(r)
+func (app *application) showAccountHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := app.readIDParam(r)
+	if err != nil {
+		app.notFoundResponse(w, r)
+		return
+	}
 
-// 	account, err := app.models.Accounts.Get(id, requestingBank.Id)
-// 	if err != nil {
-// 		switch {
-// 		case errors.Is(err, data.ErrRecordNotFound):
-// 			app.notFoundResponse(w, r)
-// 		default:
-// 			app.serverErrorResponse(w, r, err)
-// 		}
-// 		return
-// 	}
+	requestingBank := app.contextGetBank(r)
 
-// 	err = app.writeJSON(w, http.StatusOK, envelope{"account": account}, nil)
-// 	if err != nil {
-// 		app.serverErrorResponse(w, r, err)
-// 	}
-// }
+	account, err := app.models.Accounts.Get(id)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.notFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
 
-// func (app *application) updateAccountHandler(w http.ResponseWriter, r *http.Request) {
-// 	id, err := app.readIDParam(r)
-// 	if err != nil {
-// 		app.notFoundResponse(w, r)
-// 		return
-// 	}
+	if account.ControllingBank != requestingBank.Username && !requestingBank.Admin {
+		app.notFoundResponse(w, r)
+	}
 
-// 	requestingBank := app.contextGetBank(r)
+	err = app.writeJSON(w, http.StatusOK, envelope{"account": account}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
 
-// 	account, err := app.models.Accounts.Get(id, requestingBank.Id)
-// 	if err != nil {
-// 		switch {
-// 		case errors.Is(err, data.ErrRecordNotFound):
-// 			app.notFoundResponse(w, r)
-// 		default:
-// 			app.serverErrorResponse(w, r, err)
-// 		}
-// 		return
-// 	}
+func (app *application) updateAccountFrozenHandler(w http.ResponseWriter, r *http.Request) {
+	requestingBank := app.contextGetBank(r)
 
-// 	var input struct {
-// 		Frozen         *bool  `json:"frozen"`
-// 		BalanceInCents *int64 `json:"balance_in_cents"`
-// 	}
+	var input struct {
+		Id     int64 `json:"id"`
+		Frozen bool  `json:"frozen"`
+	}
 
-// 	err = app.readJSON(w, r, &input)
-// 	if err != nil {
-// 		app.badRequestResponse(w, r, err)
-// 		return
-// 	}
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
 
-// 	if input.Frozen != nil {
-// 		account.Frozen = *input.Frozen
-// 	}
+	account, err := app.models.Accounts.Get(input.Id)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.notFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
 
-// 	if input.BalanceInCents != nil {
-// 		account.BalanceInCents = *input.BalanceInCents
-// 	}
+	if account.ControllingBank != requestingBank.Username && !requestingBank.Admin {
+		app.notFoundResponse(w, r)
+	}
 
-// 	v := validator.New()
+	account.Frozen = input.Frozen
 
-// 	if data.ValidateAccount(v, account); !v.Valid() {
-// 		app.failedValidationResponse(w, r, v.Errors)
-// 		return
-// 	}
+	err = app.models.Accounts.Update(account)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrEditConflict):
+			app.editConflictResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
 
-// 	err = app.models.Accounts.Update(account, requestingBank.Id)
-// 	if err != nil {
-// 		switch {
-// 		case errors.Is(err, data.ErrEditConflict):
-// 			app.editConflictResponse(w, r)
-// 		default:
-// 			app.serverErrorResponse(w, r, err)
-// 		}
-// 		return
-// 	}
+	err = app.writeJSON(w, http.StatusOK, envelope{"account": account}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
 
-// 	err = app.writeJSON(w, http.StatusOK, envelope{"account": account}, nil)
-// 	if err != nil {
-// 		app.serverErrorResponse(w, r, err)
-// 	}
-// }
+func (app *application) updateAccountMetadataHandler(w http.ResponseWriter, r *http.Request) {
+	requestingBank := app.contextGetBank(r)
 
-// func (app *application) deleteAccountHandler(w http.ResponseWriter, r *http.Request) {
-// 	id, err := app.readIDParam(r)
-// 	if err != nil {
-// 		app.notFoundResponse(w, r)
-// 		return
-// 	}
+	var input struct {
+		Id       int64  `json:"id"`
+		Metadata string `json:"metadata"`
+	}
 
-// 	requestingBank := app.contextGetBank(r)
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
 
-// 	err = app.models.Accounts.Delete(id, requestingBank.Id)
-// 	if err != nil {
-// 		switch {
-// 		case errors.Is(err, data.ErrRecordNotFound):
-// 			app.notFoundResponse(w, r)
-// 		default:
-// 			app.serverErrorResponse(w, r, err)
-// 		}
-// 		return
-// 	}
+	v := validator.New()
 
-// 	err = app.writeJSON(w, http.StatusOK, envelope{"message": "account successfully deleted"}, nil)
-// 	if err != nil {
-// 		app.serverErrorResponse(w, r, err)
-// 	}
-// }
+	if data.ValidateAccountMetadata(v, input.Metadata); !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
 
-// func (app *application) listAccountsHandler(w http.ResponseWriter, r *http.Request) {
-// 	var input struct {
-// 		Frozen bool
-// 		data.Filters
-// 	}
+	account, err := app.models.Accounts.Get(input.Id)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.notFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
 
-// 	requestingBank := app.contextGetBank(r)
+	if account.ControllingBank != requestingBank.Username && !requestingBank.Admin {
+		app.notFoundResponse(w, r)
+	}
 
-// 	v := validator.New()
+	account.Metadata = input.Metadata
 
-// 	qs := r.URL.Query()
+	err = app.models.Accounts.Update(account)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrEditConflict):
+			app.editConflictResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
 
-// 	input.Frozen = app.readBool(qs, "frozen", false, v)
+	err = app.writeJSON(w, http.StatusOK, envelope{"account": account}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
 
-// 	input.Filters.Page = app.readInt(qs, "page", 1, v)
-// 	input.Filters.PageSize = app.readInt(qs, "page_size", 20, v)
+func (app *application) updateAccountBalanceInCentsHandler(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Id            int64 `json:"id"`
+		ChangeInCents int64 `json:"change_in_cents"`
+	}
 
-// 	input.Filters.Sort = app.readString(qs, "sort", "id")
-// 	input.Filters.SortSafelist = []string{"id", "frozen", "-id", "-frozen"}
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
 
-// 	if data.ValidateFilters(v, input.Filters); !v.Valid() {
-// 		app.failedValidationResponse(w, r, v.Errors)
-// 		return
-// 	}
+	account, err := app.models.Accounts.Get(input.Id)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.notFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
 
-// 	accounts, metadata, err := app.models.Accounts.GetAll(requestingBank.Id, input.Filters)
-// 	if err != nil {
-// 		app.serverErrorResponse(w, r, err)
-// 		return
-// 	}
+	account.BalanceInCents += input.ChangeInCents
 
-// 	err = app.writeJSON(w, http.StatusOK, envelope{"accounts": accounts, "metadata": metadata}, nil)
-// 	if err != nil {
-// 		app.serverErrorResponse(w, r, err)
-// 	}
-// }
+	err = app.models.Accounts.Update(account)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrEditConflict):
+			app.editConflictResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	err = app.writeJSON(w, http.StatusOK, envelope{"account": account}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}

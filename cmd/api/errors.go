@@ -83,3 +83,8 @@ func (app *application) notPermittedResponse(w http.ResponseWriter, r *http.Requ
 	message := "your account doesn't have the necessary permissions to access this resource"
 	app.errorResponse(w, r, http.StatusForbidden, message)
 }
+
+func (app *application) insufficentFundsResponse(w http.ResponseWriter, r *http.Request) {
+	message := "the source account does not have the required funds"
+	app.errorResponse(w, r, http.StatusBadRequest, message)
+}

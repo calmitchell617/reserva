@@ -27,7 +27,7 @@ type Token struct {
 	Admin        bool      `json:"-"`
 }
 
-func generateToken(bank *Bank, ttl time.Duration, scope string) (*Token, error) {
+func generateToken(bank *Bank, ttl time.Duration) (*Token, error) {
 	token := &Token{
 		BankUsername: bank.Username,
 		Expiry:       time.Now().Add(ttl),
@@ -59,8 +59,8 @@ type TokenModel struct {
 	Cache *redis.Client
 }
 
-func (m TokenModel) New(bank *Bank, ttl time.Duration, scope string) (*Token, error) {
-	token, err := generateToken(bank, ttl, scope)
+func (m TokenModel) New(bank *Bank, ttl time.Duration) (*Token, error) {
+	token, err := generateToken(bank, ttl)
 	if err != nil {
 		return nil, err
 	}

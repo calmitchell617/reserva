@@ -1,5 +1,16 @@
 package data
 
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/calmitchell617/reserva/internal/validator"
+	"github.com/calmitchell617/reserva/pkg"
+)
+
 // import (
 // 	"context"
 // 	"database/sql"
@@ -10,101 +21,117 @@ package data
 // 	"github.com/calmitchell617/reserva/internal/validator"
 // )
 
-// type Account struct {
-// 	Id             int64  `json:"id"`
-// 	BankUsername   string `json:"bank_username"`
-// 	BalanceInCents int64  `json:"balance_in_cents"`
-// 	Frozen         bool   `json:"frozen"`
-// 	Version        int64  `json:"version"`
-// }
+type Account struct {
+	Id              int64  `json:"id"`
+	ControllingBank string `json:"controlling_bank"`
+	Metadata        string `json:"metadata"`
+	BalanceInCents  int64  `json:"balance_in_cents"`
+	Frozen          bool   `json:"frozen"`
+	Version         int64  `json:"version"`
+}
 
-// func ValidateAccount(v *validator.Validator, account *Account) {
-// 	v.Check(account.BankUsername != "", "username", "must be provided")
-// }
+func ValidateAccount(v *validator.Validator, account *Account) {
+	v.Check(account.ControllingBank != "", "controlling_bank", "must be provided")
+	v.Check(account.Metadata != "", "metadata", "must be provided")
+	v.Check(pkg.IsJSON(account.Metadata), "metadata", "must be valid JSON")
+}
 
-// type AccountModel struct {
-// 	Db *sql.DB
-// }
+func ValidateAccountMetadata(v *validator.Validator, metadata string) {
+	v.Check(pkg.IsJSON(metadata), "controlling_bank", "must be provided")
+}
 
-// func (m AccountModel) Insert(account *Account) error {
-// 	query := `
-//         INSERT INTO accounts (bank_id)
-//         VALUES ($1)
-//         RETURNING id, version`
+type AccountModel struct {
+	Db *sql.DB
+}
 
-// 	args := []interface{}{account.BankId}
+func (m AccountModel) Insert(account *Account) (int64, error) {
+	query := `
+        INSERT INTO accounts (controlling_bank, metadata)
+        VALUES (?, ?)`
 
-// 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-// 	defer cancel()
+	args := []interface{}{account.ControllingBank, account.Metadata}
 
-// 	return m.Db.QueryRowContext(ctx, query, args...).Scan(&account.Id, &account.Version)
-// }
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 
-// func (m AccountModel) Get(id int64, bankId int64) (*Account, error) {
-// 	if id < 1 {
-// 		return nil, ErrRecordNotFound
-// 	}
+	result, err := m.Db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("unable to run bank insertion query, err: %v", err)
+	}
 
-// 	query := `
-//         SELECT id, bank_id, balance_in_cents, frozen, version
-//         FROM accounts
-//         WHERE id = $1 and bank_id = $2`
+	accountId, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("unable to get bankId for last account insertion, err: %v", err)
+	}
+	return accountId, err
+}
 
-// 	var account Account
+func (m AccountModel) Get(id int64) (*Account, error) {
+	if id < 1 {
+		return nil, ErrRecordNotFound
+	}
 
-// 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-// 	defer cancel()
+	query := `
+        SELECT id, controlling_bank, metadata, balance_in_cents, frozen, version
+        FROM accounts
+        WHERE id = ?`
 
-// 	err := m.Db.QueryRowContext(ctx, query, id, bankId).Scan(
-// 		&account.Id,
-// 		&account.BankId,
-// 		&account.BalanceInCents,
-// 		&account.Frozen,
-// 		&account.Version,
-// 	)
+	var account Account
 
-// 	if err != nil {
-// 		switch {
-// 		case errors.Is(err, sql.ErrNoRows):
-// 			return nil, ErrRecordNotFound
-// 		default:
-// 			return nil, err
-// 		}
-// 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 
-// 	return &account, nil
-// }
+	err := m.Db.QueryRowContext(ctx, query, id).Scan(
+		&account.Id,
+		&account.ControllingBank,
+		&account.Metadata,
+		&account.BalanceInCents,
+		&account.Frozen,
+		&account.Version,
+	)
 
-// func (m AccountModel) Update(account *Account, bankId int64) error {
-// 	query := `
-//         UPDATE accounts
-//         SET balance_in_cents = $1, frozen = $2, version = version + 1
-//         WHERE id = $3 and bank_id = $4 and version = $5
-//         RETURNING version`
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
 
-// 	args := []interface{}{
-// 		account.BalanceInCents,
-// 		account.Frozen,
-// 		account.Id,
-// 		account.BankId,
-// 		account.Version,
-// 	}
+	return &account, nil
+}
 
-// 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-// 	defer cancel()
+func (m AccountModel) Update(account *Account) error {
+	query := `
+        UPDATE accounts
+        SET balance_in_cents = ?, frozen = ?, metadata = ?, version = version + 1
+        WHERE id = ? and controlling_bank = ? and version = ?`
 
-// 	err := m.Db.QueryRowContext(ctx, query, args...).Scan(&account.Version)
-// 	if err != nil {
-// 		switch {
-// 		case errors.Is(err, sql.ErrNoRows):
-// 			return ErrEditConflict
-// 		default:
-// 			return err
-// 		}
-// 	}
+	args := []interface{}{
+		account.BalanceInCents,
+		account.Frozen,
+		account.Metadata,
+		account.Id,
+		account.ControllingBank,
+		account.Version,
+	}
 
-// 	return nil
-// }
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	_, err := m.Db.QueryContext(ctx, query, args...)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return ErrEditConflict
+		default:
+			return err
+		}
+	}
+
+	return nil
+}
 
 // func (m AccountModel) Delete(id int64, bankId int64) error {
 // 	if id < 1 {

@@ -24,12 +24,10 @@ var (
 )
 
 type Bank struct {
-	Username       string   `json:"username"`
-	Admin          bool     `json:"admin"`
-	Password       password `json:"-"`
-	BalanceInCents int64    `json:"balance_in_cents"`
-	Frozen         bool     `json:"frozen"`
-	Version        int64    `json:"-"`
+	Username string   `json:"username"`
+	Admin    bool     `json:"admin"`
+	Password password `json:"-"`
+	Version  int64    `json:"-"`
 }
 
 func (u *Bank) IsAnonymous() bool {
@@ -90,8 +88,6 @@ func (m BankModel) GetByUsername(username string) (*Bank, error) {
 					username,
 					admin,
 					password_hash,
-					balance_in_cents,
-					frozen,
 					version
         FROM banks
         WHERE username = ?`
@@ -105,8 +101,6 @@ func (m BankModel) GetByUsername(username string) (*Bank, error) {
 		&bank.Username,
 		&bank.Admin,
 		&bank.Password.hash,
-		&bank.BalanceInCents,
-		&bank.Frozen,
 		&bank.Version,
 	)
 
@@ -126,19 +120,14 @@ func (m BankModel) Update(bank *Bank) error {
 	query := `
         UPDATE banks 
         SET
-					admin = $1,
-					password_hash = $2,
-					balance_in_cents = $3,
-					frozen = $4,
+					admin = ?,
+					password_hash = ?,
 					version = version + 1
-        WHERE username = $5 AND version = $6
-        RETURNING version`
+        WHERE username = ? AND version = ?`
 
 	args := []interface{}{
 		bank.Admin,
 		bank.Password.hash,
-		bank.BalanceInCents,
-		bank.Frozen,
 		bank.Username,
 		bank.Version,
 	}
@@ -146,7 +135,7 @@ func (m BankModel) Update(bank *Bank) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	err := m.Db.QueryRowContext(ctx, query, args...).Scan(&bank.Version)
+	_, err := m.Db.QueryContext(ctx, query, args...)
 	if err != nil {
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
@@ -218,8 +207,6 @@ func (m BankModel) GetByToken(tokenScope, tokenPlaintext string) (*Bank, error) 
 			username,
 			admin,
 			password_hash,
-			balance_in_cents,
-			frozen,
 			version
 		FROM banks
 		WHERE username = ?`
@@ -230,8 +217,6 @@ func (m BankModel) GetByToken(tokenScope, tokenPlaintext string) (*Bank, error) 
 		&bank.Username,
 		&bank.Admin,
 		&bank.Password.hash,
-		&bank.BalanceInCents,
-		&bank.Frozen,
 		&bank.Version,
 	)
 	if err != nil {

@@ -2,27 +2,12 @@
 
 All routes require bearer token authentication unless otherwise noted.
 
+admin bank = central bank
+
 ## Banks
 ---
 
 ### `/v1/banks`
-- `GET`
-  - Gets the requesting bank's info.
-  - Requires bank's token, or admin token
-
-  ### ***Request***
-  `GET` with `?id=<number>` query parameter.
-
-  ### ***Response***
-  ```
-  {
-    "id": <number>,
-    "username": <string>,
-    "balance_in_cents": <number>,
-    "frozen": <boolean>
-  }
-  ```
-
 - `POST`
   - Creates a new bank
   - Requires admin token
@@ -31,88 +16,35 @@ All routes require bearer token authentication unless otherwise noted.
   ```
   {
     "username": <string>,
-    "name": <string>
+    "admin": <boolean>
   }
   ```
 
   ### ***Response***
   ```
   {
-    "id": <number>,
     "username": <string>,
-    "name": <string>,
-    "balance_in_cents": <number>,
-    "frozen": <boolean>
+    "admin": <boolean>
   }
   ```
 
-### `/v1/banks/balance_in_cents`
-- `PATCH`
-  - Updates bank's balance
-  - Requires admin token
+### `/v1/banks/:username`
+- `GET`
+  - Gets the bank's info
+  - Requires bank's token, or admin token
 
   ### ***Request***
-  ```
-  {
-    "id": <number>,
-    "balance_in_cents": <number>
-  }
-
-  ```
-  ### ***Response***
-  ```
-  {
-    "id": <number>,
-    "username": <string>,
-    "name": <string>,
-    "balance_in_cents": <number>,
-    "frozen": <boolean>
-  }
-  ```
-
-### `/v1/banks/frozen`
-- `PATCH`
-  - Updates bank's frozen value
-  - Requires admin token
-
-  ### ***Request***
-  ```
-  {
-    "id": <number>,
-    "frozen": <boolean>
-  }
-  ```
+  `GET` with no query parameters.
 
   ### ***Response***
   ```
   {
-    "id": <number>,
     "username": <string>,
-    "name": <string>,
-    "balance_in_cents": <number>,
-    "frozen": <boolean>
+    "admin": <boolean>
   }
   ```
 
 ## Accounts
-
-### `/v1/accounts`
-- `GET`
-  - Gets an account's info
-
-  ### ***Request***
-  `GET` with `?id=<number>` query parameter.
-
-  ### ***Response***
-  ```
-  {
-    "id": <number>,
-    "kyc_data": <object>,
-    "bank_id": <number>,
-    "frozen": <boolean>,
-    "balance_in_cents": <number>
-  }
-  ```
 
 - `POST`
   - Creates an account
@@ -120,7 +52,7 @@ All routes require bearer token authentication unless otherwise noted.
   ### ***Request***
   ```
   {
-    "kyc_data": <object>
+    "metadata": <object>
   }
   ```
 
@@ -128,14 +60,56 @@ All routes require bearer token authentication unless otherwise noted.
   ```
   {
     "id": <number>,
-    "kyc_data": <object>,
-    "bank_id": <number>,
+    "metadata": <object>,
+    "bank_username": <string>,
     "frozen": <boolean>,
     "balance_in_cents": <number>
   }
   ```
 
-### `/v1/accounts/kyc_data`
+### `/v1/accounts/:id`
+- `GET`
+  - Gets an account's info
+
+  ### ***Request***
+  `GET` with no query parameters.
+
+  ### ***Response***
+  ```
+  {
+    "id": <number>,
+    "metadata": <object>,
+    "bank_username": <string>,
+    "frozen": <boolean>,
+    "balance_in_cents": <number>
+  }
+  ```
+
+### `/v1/accounts/balance_in_cents`
+- `PATCH`
+  - Changes the account's balance, which alters the total money supply.
+  - Requires admin token
+
+  ### ***Request***
+  ```
+  {
+    "id": <number>,
+    "amount_in_cents": <number>
+  }
+
+  ```
+  ### ***Response***
+  ```
+  {
+    "id": <number>,
+    "metadata": <object>,
+    "bank_username": <string>,
+    "frozen": <boolean>,
+    "balance_in_cents": <number>
+  }
+  ```
+
+### `/v1/accounts/metadata`
 - `PATCH`
   - Changes account's KYC data.
 
@@ -143,7 +117,7 @@ All routes require bearer token authentication unless otherwise noted.
   ```
   {
     "id": <number>,
-    "kyc_data": <object>
+    "metadata": <object>
   }
   ```
 
@@ -151,8 +125,8 @@ All routes require bearer token authentication unless otherwise noted.
   ```
   {
     "id": <number>,
-    "kyc_data": <object>,
-    "bank_id": <number>,
+    "metadata": <object>,
+    "bank_username": <string>,
     "frozen": <boolean>,
     "balance_in_cents": <number>
   }
@@ -174,8 +148,8 @@ All routes require bearer token authentication unless otherwise noted.
   ```
   {
     "id": <number>,
-    "kyc_data": <object>,
-    "bank_id": <number>,
+    "metadata": <object>,
+    "bank_username": <string>,
     "frozen": <boolean>,
     "balance_in_cents": <number>
   }
@@ -192,9 +166,7 @@ All routes require bearer token authentication unless otherwise noted.
   {
     "source_account_id": <number>,
     "target_account_id": <number>,
-    "amount_in_cents": <number>,
-    "latitude": <number>,
-    "longitude": <number> 
+    "amount_in_cents": <number>
   }
   ```
 
@@ -205,36 +177,8 @@ All routes require bearer token authentication unless otherwise noted.
     "created_at": <string...RFC 3339>
     "source_account": <number>,
     "target_account": <number>,
-    "amount_in_cents": <number>,
-    "latitude": <number>,
-    "longitude": <number>
+    "amount_in_cents": <number>
   }
-  ```
-
-- `GET`
-  - Allows you to search for transactions with various filtering critera.
-
-  ### ***Request***
-  `GET` with `id`, `source_account`, or `target_account` query parameters. Also can filter with `created_at`.
-
-  ### ***Response***
-  ```
-  [
-    {
-      "id": <number>,
-      "created_at": <string...RFC 3339>
-      "source_account": <number>,
-      "target_account": <number>,
-      "amount_in_cents": <number>
-    },
-    {
-      "id": <number>,
-      "created_at": <string...RFC 3339>
-      "source_account": <number>,
-      "target_account": <number>,
-      "amount_in_cents": <number>
-    }...
-  ]
   ```
 
 ## Tokens
@@ -258,58 +202,12 @@ All routes require bearer token authentication unless otherwise noted.
   }
   ```
 
-### `/v1/tokens/activation`
-- `POST`
-  - Create an activation token
-
-  ### ***Request***
-  ```
-  {
-    "email": <string>
-  }
-  ```
-
-  ### ***Response***
-  ```
-  {
-    "message": <string>
-  }
-  ```
-
-### `/v1/tokens/password-reset`
-- `POST`
-  - Create a password reset token
-
-  ### ***Request***
-  ```
-  {
-    "email": <string>
-  }
-  ```
-
-  ### ***Response***
-  ```
-  {
-    "message": <string>
-  }
-  ```
-
 ## Utility
 
 ### `/v1/healthcheck`
 - `GET`
   - A healthcheck
 
-  ### ***Request***
-  `GET` with no query parameters.
-
-  ### ***Response***
-  ```
-  {
-		"status": <string>,
-		"system_info": {
-			"environment": <string>,
-			"version": <string
-		}
-	}
-  ```
+### `/debug/vars`
+- `GET`
+  - Get system info

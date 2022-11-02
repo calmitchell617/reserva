@@ -52,7 +52,7 @@ func (app *application) createAuthenticationTokenHandler(w http.ResponseWriter, 
 		return
 	}
 
-	token, err := app.models.Tokens.New(bank, 8*24*time.Hour, data.ScopeAuthentication)
+	token, err := app.models.Tokens.New(bank, 8*24*time.Hour)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
