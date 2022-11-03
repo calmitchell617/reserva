@@ -51,7 +51,7 @@ func (m AccountModel) Insert(account *Account) (int64, error) {
 
 	args := []interface{}{account.ControllingBank, account.Metadata}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	result, err := m.Db.ExecContext(ctx, query, args...)
@@ -78,7 +78,7 @@ func (m AccountModel) Get(id int64) (*Account, error) {
 
 	var account Account
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	err := m.Db.QueryRowContext(ctx, query, id).Scan(
@@ -117,7 +117,7 @@ func (m AccountModel) Update(account *Account) error {
 		account.Version,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	_, err := m.Db.QueryContext(ctx, query, args...)
@@ -142,7 +142,7 @@ func (m AccountModel) Update(account *Account) error {
 //         DELETE FROM accounts
 //         WHERE id = $1 and bank_id = $2`
 
-// 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 // 	defer cancel()
 
 // 	result, err := m.Db.ExecContext(ctx, query, id, bankId)
@@ -170,7 +170,7 @@ func (m AccountModel) Update(account *Account) error {
 //         ORDER BY %s %s, id ASC
 //         LIMIT $2 OFFSET $3`, filters.sortColumn(), filters.sortDirection())
 
-// 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 // 	defer cancel()
 
 // 	args := []interface{}{bankId, filters.limit(), filters.offset()}

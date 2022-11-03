@@ -66,7 +66,7 @@ func (m BankModel) Insert(bank *Bank) error {
 
 	args := []interface{}{bank.Username, bank.Admin, bank.Password.hash}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	_, err := m.Db.ExecContext(ctx, query, args...)
@@ -94,7 +94,7 @@ func (m BankModel) GetByUsername(username string) (*Bank, error) {
 
 	var bank Bank
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	err := m.Db.QueryRowContext(ctx, query, username).Scan(
@@ -132,7 +132,7 @@ func (m BankModel) Update(bank *Bank) error {
 		bank.Version,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	_, err := m.Db.QueryContext(ctx, query, args...)

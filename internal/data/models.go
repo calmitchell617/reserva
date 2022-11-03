@@ -16,7 +16,6 @@ type Models struct {
 	Tokens    TokenModel
 	Banks     BankModel
 	Accounts  AccountModel
-	Cards     CardModel
 	Transfers TransferModel
 }
 
@@ -26,6 +25,5 @@ func NewModels(db *sql.DB, cache *redis.Client) Models {
 		Banks:     BankModel{Db: db, Cache: cache},
 		Accounts:  AccountModel{Db: db},
 		Transfers: TransferModel{Db: db},
-		Cards:     CardModel{Db: db},
 	}
 }

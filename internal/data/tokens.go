@@ -70,7 +70,7 @@ func (m TokenModel) New(bank *Bank, ttl time.Duration) (*Token, error) {
 }
 
 func (m TokenModel) Insert(token *Token) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	tokenKey := fmt.Sprintf("tokens/%v", string(token.Hash))
@@ -100,7 +100,7 @@ func (m TokenModel) Insert(token *Token) error {
 //         DELETE FROM tokens
 //         WHERE scope = $1 AND bank_id = $2`
 
-// 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 // 	defer cancel()
 
 // 	_, err := m.Db.ExecContext(ctx, query, scope, bankID)
@@ -108,7 +108,7 @@ func (m TokenModel) Insert(token *Token) error {
 // }
 
 // func (m TokenModel) CheckAdminToken(token string) (bool, error) {
-// 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 // 	defer cancel()
 
 // 	adminToken, err := m.Cache.Get(ctx, "admin-token").Result()

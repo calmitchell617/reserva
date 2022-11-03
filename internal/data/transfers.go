@@ -29,7 +29,7 @@ type TransferModel struct {
 }
 
 func (m TransferModel) Insert(transfer *Transfer) (*Transfer, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	tx, err := m.Db.BeginTx(ctx, &sql.TxOptions{})
