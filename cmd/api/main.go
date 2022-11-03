@@ -66,8 +66,8 @@ func main() {
 	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
 
 	flag.StringVar(&cfg.db.dsn, "db-dsn", "", "DB DSN")
-	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "DB max open connections")
-	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "DB max idle connections")
+	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 100, "DB max open connections")
+	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 100, "DB max idle connections")
 	flag.StringVar(&cfg.db.maxIdleTime, "db-max-idle-time", "15m", "DB max connection idle time")
 
 	flag.StringVar(&cfg.cache.host, "cache-host", "", "Cache host")

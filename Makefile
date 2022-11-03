@@ -9,12 +9,12 @@ vendor:
 ## run/api: run the cmd/api application
 .PHONY: run/api
 run/api: build/api
-	sudo bin/api -port 80 -db-dsn=${DB_DSN} -cache-host=localhost -cache-port=6379
+	sudo bin/api -port 80 -db-dsn=${DB_DSN} -cache-host=${REDIS_HOST} -cache-port=6379
 
 ## run/addBank: run the cmd/addBank application
 .PHONY: run/addBank
 run/addBank: build/addBank
-	sudo bin/addBank -db-dsn=${DB_DSN} -cache-host=localhost -cache-port=6379 -bank-username="adminBank" -bank-password="Mypass123" -bank-admin=true
+	sudo bin/addBank -db-dsn=${DB_DSN} -cache-host=${REDIS_HOST} -cache-port=6379 -bank-username="adminBank" -bank-password="Mypass123" -bank-admin=true
 
 ## run/loadTest: run the cmd/loadTest application
 .PHONY: run/loadTest

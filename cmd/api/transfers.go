@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -40,28 +39,28 @@ func (app *application) createTransferHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	sourceAccount, err := app.models.Accounts.Get(input.SourceAccountId)
-	if err != nil {
-		switch {
-		case errors.Is(err, data.ErrRecordNotFound):
-			app.notFoundResponse(w, r)
-		default:
-			app.serverErrorResponse(w, r, err)
-		}
-		return
-	}
+	// sourceAccount, err := app.models.Accounts.Get(input.SourceAccountId)
+	// if err != nil {
+	// 	switch {
+	// 	case errors.Is(err, data.ErrRecordNotFound):
+	// 		app.notFoundResponse(w, r)
+	// 	default:
+	// 		app.serverErrorResponse(w, r, err)
+	// 	}
+	// 	return
+	// }
 
-	if sourceAccount.ControllingBank != requestingBank.Username && !requestingBank.Admin {
-		app.notPermittedResponse(w, r)
-		return
-	}
+	// if sourceAccount.ControllingBank != requestingBank.Username && !requestingBank.Admin {
+	// 	app.notPermittedResponse(w, r)
+	// 	return
+	// }
 
-	if sourceAccount.BalanceInCents < transfer.AmountInCents {
-		app.insufficentFundsResponse(w, r)
-		return
-	}
+	// if sourceAccount.BalanceInCents < transfer.AmountInCents {
+	// 	app.insufficentFundsResponse(w, r)
+	// 	return
+	// }
 
-	transfer, err = app.models.Transfers.Insert(transfer)
+	transfer, err = app.models.Transfers.Insert(transfer, *requestingBank)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return

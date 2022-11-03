@@ -28,7 +28,7 @@ type TransferModel struct {
 	Db *sql.DB
 }
 
-func (m TransferModel) Insert(transfer *Transfer) (*Transfer, error) {
+func (m TransferModel) Insert(transfer *Transfer, requestingBank Bank) (*Transfer, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -38,11 +38,45 @@ func (m TransferModel) Insert(transfer *Transfer) (*Transfer, error) {
 		return nil, err
 	}
 
+	// query := `update accounts set balance_in_cents = balance_in_cents - ?, version = version + 1 where id = ?`
+
+	// args := []interface{}{transfer.AmountInCents, transfer.SourceAccountId} //, transfer.AmountInCents, requestingBank.Username, requestingBank.Admin}
+
+	// result, err := tx.ExecContext(ctx, query, args...)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("unable to run transfer source account update query, err: %v", err)
+	// }
+
+	// rowsAffected, err := result.RowsAffected()
+	// if err != nil {
+	// 	return nil, fmt.Errorf("unable to get rows affected from transfer creation query, err: %v", err)
+	// }
+	// if rowsAffected == 0 {
+	// 	return nil, fmt.Errorf("insufficient funds or insufficient permissions to initiate transfer, err: %v", err)
+	// }
+
 	query := `
+		update accounts
+	set balance_in_cents = case
+		when id = ? then balance_in_cents - ?
+		when id = ? then balance_in_cents + ?
+	end,
+	version = version + 1
+	where id in (?, ?)
+		`
+
+	args := []interface{}{transfer.SourceAccountId, transfer.AmountInCents, transfer.TargetAccountId, transfer.AmountInCents, transfer.SourceAccountId, transfer.TargetAccountId}
+
+	_, err = tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("unable to run transfer target account update query, err: %v", err)
+	}
+
+	query = `
         INSERT INTO transfers (source_account_id, target_account_id, amount_in_cents, created_at)
         VALUES (?, ?, ?, ?)`
 
-	args := []interface{}{transfer.SourceAccountId, transfer.TargetAccountId, transfer.AmountInCents, transfer.CreatedAt}
+	args = []interface{}{transfer.SourceAccountId, transfer.TargetAccountId, transfer.AmountInCents, transfer.CreatedAt}
 
 	result, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
@@ -52,24 +86,6 @@ func (m TransferModel) Insert(transfer *Transfer) (*Transfer, error) {
 	transfer.Id, err = result.LastInsertId()
 	if err != nil {
 		return nil, err
-	}
-
-	query = `update accounts set balance_in_cents = balance_in_cents - ?, version = version + 1 where id = ?`
-
-	args = []interface{}{transfer.AmountInCents, transfer.SourceAccountId}
-
-	_, err = tx.ExecContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("unable to run transfer source account update query, err: %v", err)
-	}
-
-	query = `update accounts set balance_in_cents = balance_in_cents + ?, version = version + 1 where id = ?`
-
-	args = []interface{}{transfer.AmountInCents, transfer.TargetAccountId}
-
-	_, err = tx.ExecContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("unable to run transfer target account update query, err: %v", err)
 	}
 
 	err = tx.Commit()
