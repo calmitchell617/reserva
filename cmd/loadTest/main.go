@@ -29,6 +29,7 @@ type AuthToken struct {
 }
 
 func main() {
+	start := time.Now()
 
 	flag.StringVar(&host, "host", "", "reserva host")
 
@@ -63,6 +64,9 @@ func main() {
 	bankBearerTokens := make([]string, numBanks)
 	errGroup := new(errgroup.Group)
 	errGroup.SetLimit(100)
+
+	fmt.Printf("finished setting up admin bank, took %v\n", time.Since(start))
+	start = time.Now()
 
 	// Create test banks
 	for i := 0; i < numBanks; i++ {
@@ -108,7 +112,9 @@ func main() {
 	if err != nil {
 		logger.PrintFatal(errors.New("unable to create banks"), map[string]string{"error": err.Error()})
 	}
-	fmt.Println("done creating banks")
+	fmt.Printf("done creating banks, took %v\n", time.Since(start))
+	errGroup.SetLimit(100)
+	start = time.Now()
 
 	// create test accounts
 	for i := 0; i < 1000; i++ {
@@ -155,7 +161,8 @@ func main() {
 	if err != nil {
 		logger.PrintFatal(errors.New("unable to create accounts"), map[string]string{"error": err.Error()})
 	}
-	fmt.Println("done creating accounts")
+	fmt.Printf("done creating accounts, took %v\n", time.Since(start))
+	start = time.Now()
 
 	// // create test transactions
 	for i := 0; i < 10000; i++ {
@@ -196,5 +203,5 @@ func main() {
 	if err != nil {
 		logger.PrintFatal(errors.New("unable to create transfers"), map[string]string{"error": err.Error()})
 	}
-	fmt.Println("done creating transfers")
+	fmt.Printf("done creating transfers, took %v\n", time.Since(start))
 }
