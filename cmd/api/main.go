@@ -75,7 +75,7 @@ func main() {
 	flag.StringVar(&cfg.cache.password, "cache-dsn", "", "Cache password")
 	flag.IntVar(&cfg.cache.db, "cache-db", 0, "Cache db")
 
-	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", true, "Enable rate limiter")
+	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", false, "Enable rate limiter")
 	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum requests per second")
 	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
 

@@ -14,7 +14,12 @@ run/api: build/api
 ## run/addBank: run the cmd/addBank application
 .PHONY: run/addBank
 run/addBank: build/addBank
-	sudo bin/addBank -db-dsn=${DB_DSN} -cache-host=localhost -cache-port=6379 -bank-username="calBank" -bank-password="Mypass123" -bank-admin=true
+	sudo bin/addBank -db-dsn=${DB_DSN} -cache-host=localhost -cache-port=6379 -bank-username="adminBank" -bank-password="Mypass123" -bank-admin=true
+
+## run/loadTest: run the cmd/loadTest application
+.PHONY: run/loadTest
+run/loadTest: build/loadTest
+	sudo bin/loadTest -host="http://localhost"
 
 ## delve: run the server
 .PHONY: delve
@@ -32,6 +37,12 @@ build/api:
 build/addBank:
 	@echo 'Building cmd/addBank...'
 	go build -ldflags="-s" -o=./bin/addBank ./cmd/addBank
+
+## build/loadTest: build the cmd/loadTest application
+.PHONY: build/loadTest
+build/loadTest:
+	@echo 'Building cmd/loadTest...'
+	go build -ldflags="-s" -o=./bin/loadTest ./cmd/loadTest
 
 ## build/delve: build the cmd/api application with delve friendly flags
 .PHONY: build/delve
