@@ -6,6 +6,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
@@ -16,7 +18,8 @@ import (
 )
 
 var (
-	host string
+	host        string
+	concurrency int
 )
 
 type AuthTokenResponse struct {
@@ -32,6 +35,7 @@ func main() {
 	start := time.Now()
 
 	flag.StringVar(&host, "host", "", "reserva host")
+	flag.IntVar(&concurrency, "concurrency", 100, "max num requests")
 
 	flag.Parse()
 
@@ -41,7 +45,10 @@ func main() {
 	}
 
 	logger := jsonlog.New(os.Stdout, jsonlog.LevelInfo)
-	client := &http.Client{}
+	client := &http.Client{Transport: &http.Transport{
+		MaxIdleConnsPerHost: 20,
+		MaxConnsPerHost:     concurrency,
+	}}
 
 	// Get auth token for admin bank
 
@@ -50,20 +57,21 @@ func main() {
 		logger.PrintFatal(errors.New("unable to marshal json data"), map[string]string{"error": err.Error()})
 	}
 
-	response, err := client.Post(fmt.Sprintf("%v/v1/tokens/authentication", host), "application/json; charset=UTF-8", bytes.NewBuffer(json_data))
+	resp, err := client.Post(fmt.Sprintf("%v/v1/tokens/authentication", host), "application/json; charset=UTF-8", bytes.NewBuffer(json_data))
 	if err != nil {
 		logger.PrintFatal(errors.New("unable to get initial admin bank auth token"), map[string]string{"error": err.Error()})
 	}
 
 	authTokenResp := AuthTokenResponse{}
-	json.NewDecoder(response.Body).Decode(&authTokenResp)
-	response.Body.Close()
+	json.NewDecoder(resp.Body).Decode(&authTokenResp)
+	io.Copy(ioutil.Discard, resp.Body)
+	resp.Body.Close()
 	adminBearerToken := fmt.Sprintf("Bearer %v", authTokenResp.AuthToken.Token)
 
 	numBanks := 100
 	bankBearerTokens := make([]string, numBanks)
 	errGroup := new(errgroup.Group)
-	errGroup.SetLimit(100)
+	errGroup.SetLimit(concurrency)
 
 	fmt.Printf("finished setting up admin bank, took %v\n", time.Since(start))
 	start = time.Now()
@@ -83,10 +91,12 @@ func main() {
 
 			r.Header.Add("Authorization", adminBearerToken)
 
-			_, err = client.Do(r)
+			resp, err := client.Do(r)
 			if err != nil {
 				return err
 			}
+			io.Copy(ioutil.Discard, resp.Body)
+			resp.Body.Close()
 
 			// get the auth token for that bank
 
@@ -102,6 +112,7 @@ func main() {
 
 			authTokenResp := AuthTokenResponse{}
 			json.NewDecoder(response.Body).Decode(&authTokenResp)
+			io.Copy(ioutil.Discard, resp.Body)
 			response.Body.Close()
 			bearerToken := fmt.Sprintf("%vBearer %v", i, authTokenResp.AuthToken.Token)
 			bankBearerTokens[i] = bearerToken
@@ -113,7 +124,6 @@ func main() {
 		logger.PrintFatal(errors.New("unable to create banks"), map[string]string{"error": err.Error()})
 	}
 	fmt.Printf("done creating banks, took %v\n", time.Since(start))
-	errGroup.SetLimit(100)
 	start = time.Now()
 
 	// create test accounts
@@ -133,10 +143,12 @@ func main() {
 
 			r.Header.Add("Authorization", bankBearerTokens[randomBearerTokenIndex])
 
-			_, err = client.Do(r)
+			resp, err := client.Do(r)
 			if err != nil {
 				return err
 			}
+			io.Copy(ioutil.Discard, resp.Body)
+			resp.Body.Close()
 
 			// change money supply by adding to account
 			json_data, err = json.Marshal(map[string]any{"id": i + 1, "change_in_cents": 100000000})
@@ -150,10 +162,12 @@ func main() {
 
 			r.Header.Add("Authorization", adminBearerToken)
 
-			_, err = client.Do(r)
+			resp, err = client.Do(r)
 			if err != nil {
 				return err
 			}
+			io.Copy(ioutil.Discard, resp.Body)
+			resp.Body.Close()
 			return nil
 		})
 	}
@@ -165,7 +179,7 @@ func main() {
 	start = time.Now()
 
 	// // create test transactions
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 200000; i++ {
 		i := i
 		errGroup.Go(func() error {
 			sourceId := rand.Intn(1000)
@@ -182,15 +196,12 @@ func main() {
 
 			r.Header.Add("Authorization", adminBearerToken)
 
-			_, err = client.Do(r)
+			resp, err := client.Do(r)
 			if err != nil {
 				logger.PrintFatal(errors.New("unable to perform new transfer request"), map[string]string{"error": err.Error()})
 			}
-
-			// _, err = ioutil.ReadAll(resp.Body)
-			// if err != nil {
-			// 	logger.PrintFatal(errors.New("unable to read transfer response"), map[string]string{"error": err.Error()})
-			// }
+			io.Copy(ioutil.Discard, resp.Body)
+			resp.Body.Close()
 
 			if i%1000 == 0 {
 				fmt.Println(i)
