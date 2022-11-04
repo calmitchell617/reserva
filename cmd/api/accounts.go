@@ -205,7 +205,7 @@ func (app *application) updateAccountBalanceInCentsHandler(w http.ResponseWriter
 		return
 	}
 
-	account.BalanceInCents += input.ChangeInCents
+	account.BalanceInCents = account.BalanceInCents + input.ChangeInCents
 
 	err = app.models.Accounts.Update(account)
 	if err != nil {

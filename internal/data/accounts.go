@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/calmitchell617/reserva/internal/validator"
 	"github.com/calmitchell617/reserva/pkg"
+	"github.com/go-redis/redis/v8"
 )
 
 // import (
@@ -41,7 +43,8 @@ func ValidateAccountMetadata(v *validator.Validator, metadata string) {
 }
 
 type AccountModel struct {
-	Db *sql.DB
+	Db    *sql.DB
+	Cache *redis.Client
 }
 
 func (m AccountModel) Insert(account *Account) (int64, error) {
@@ -63,6 +66,14 @@ func (m AccountModel) Insert(account *Account) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("unable to get bankId for last account insertion, err: %v", err)
 	}
+
+	// fmt.Printf("accounts/%v\n", accountId)
+
+	err = m.Cache.Set(ctx, fmt.Sprintf("accounts/%v", accountId), 0, 0).Err()
+	if err != nil {
+		return 0, fmt.Errorf("unable to set balance_in_cents in cache for last account creation, err: %v", err)
+	}
+
 	return accountId, err
 }
 
@@ -72,7 +83,7 @@ func (m AccountModel) Get(id int64) (*Account, error) {
 	}
 
 	query := `
-        SELECT id, controlling_bank, metadata, balance_in_cents, frozen, version
+        SELECT id, controlling_bank, metadata, frozen, version
         FROM accounts
         WHERE id = ?`
 
@@ -85,7 +96,6 @@ func (m AccountModel) Get(id int64) (*Account, error) {
 		&account.Id,
 		&account.ControllingBank,
 		&account.Metadata,
-		&account.BalanceInCents,
 		&account.Frozen,
 		&account.Version,
 	)
@@ -99,17 +109,26 @@ func (m AccountModel) Get(id int64) (*Account, error) {
 		}
 	}
 
+	balanceInCents, err := m.Cache.Get(ctx, fmt.Sprintf("accounts/%v", account.Id)).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	account.BalanceInCents, err = strconv.ParseInt(balanceInCents, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
 	return &account, nil
 }
 
 func (m AccountModel) Update(account *Account) error {
 	query := `
         UPDATE accounts
-        SET balance_in_cents = ?, frozen = ?, metadata = ?, version = version + 1
+        SET frozen = ?, metadata = ?, version = version + 1
         WHERE id = ? and controlling_bank = ? and version = ?`
 
 	args := []interface{}{
-		account.BalanceInCents,
 		account.Frozen,
 		account.Metadata,
 		account.Id,
@@ -130,84 +149,10 @@ func (m AccountModel) Update(account *Account) error {
 		}
 	}
 
+	err = m.Cache.Set(ctx, fmt.Sprintf("accounts/%v", account.Id), account.BalanceInCents, 0).Err()
+	if err != nil {
+		return fmt.Errorf("unable to set balance_in_cents in cache for last account creation, err: %v", err)
+	}
+
 	return nil
 }
-
-// func (m AccountModel) Delete(id int64, bankId int64) error {
-// 	if id < 1 {
-// 		return ErrRecordNotFound
-// 	}
-
-// 	query := `
-//         DELETE FROM accounts
-//         WHERE id = $1 and bank_id = $2`
-
-// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-// 	defer cancel()
-
-// 	result, err := m.Db.ExecContext(ctx, query, id, bankId)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	rowsAffected, err := result.RowsAffected()
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	if rowsAffected == 0 {
-// 		return ErrRecordNotFound
-// 	}
-
-// 	return nil
-// }
-
-// func (m AccountModel) GetAll(bankId int64, filters Filters) ([]*Account, Metadata, error) {
-// 	query := fmt.Sprintf(`
-//         SELECT count(*) OVER(), id, bank_id, balance_in_cents, frozen, version
-//         FROM accounts
-//         where bank_id = $1
-//         ORDER BY %s %s, id ASC
-//         LIMIT $2 OFFSET $3`, filters.sortColumn(), filters.sortDirection())
-
-// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-// 	defer cancel()
-
-// 	args := []interface{}{bankId, filters.limit(), filters.offset()}
-
-// 	rows, err := m.Db.QueryContext(ctx, query, args...)
-// 	if err != nil {
-// 		return nil, Metadata{}, err
-// 	}
-
-// 	defer rows.Close()
-
-// 	totalRecords := 0
-// 	accounts := []*Account{}
-
-// 	for rows.Next() {
-// 		var account Account
-
-// 		err := rows.Scan(
-// 			&totalRecords,
-// 			&account.Id,
-// 			&account.BankId,
-// 			&account.BalanceInCents,
-// 			&account.Frozen,
-// 			&account.Version,
-// 		)
-// 		if err != nil {
-// 			return nil, Metadata{}, err
-// 		}
-
-// 		accounts = append(accounts, &account)
-// 	}
-
-// 	if err = rows.Err(); err != nil {
-// 		return nil, Metadata{}, err
-// 	}
-
-// 	metadata := calculateMetadata(totalRecords, filters.Page, filters.PageSize)
-
-// 	return accounts, metadata, nil
-// }

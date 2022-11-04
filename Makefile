@@ -19,7 +19,7 @@ run/addBank: build/addBank
 ## run/loadTest: run the cmd/loadTest application
 .PHONY: run/loadTest
 run/loadTest: build/loadTest
-	sudo bin/loadTest -host="http://172.31.72.165"
+	sudo bin/loadTest -host="http://localhost"
 
 ## delve: run the server
 .PHONY: delve

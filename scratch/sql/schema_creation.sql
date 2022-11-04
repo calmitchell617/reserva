@@ -18,7 +18,7 @@ create rowstore table accounts (
   controlling_bank varchar(32) not null,
   metadata json not null,
   frozen boolean not null default false,
-  balance_in_cents bigint not null default 0,
+  -- balance_in_cents bigint not null default 0,
   version bigint not null default 0,
   primary key (id, controlling_bank),
   shard key (controlling_bank)

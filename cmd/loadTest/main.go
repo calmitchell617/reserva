@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -47,7 +48,7 @@ func main() {
 	logger := jsonlog.New(os.Stdout, jsonlog.LevelInfo)
 	client := &http.Client{Transport: &http.Transport{
 		MaxIdleConnsPerHost: 20,
-		MaxConnsPerHost:     concurrency,
+		MaxConnsPerHost:     concurrency * 2,
 	}}
 
 	// Get auth token for admin bank
@@ -62,13 +63,17 @@ func main() {
 		logger.PrintFatal(errors.New("unable to get initial admin bank auth token"), map[string]string{"error": err.Error()})
 	}
 
+	if resp.StatusCode != http.StatusCreated {
+		logger.PrintFatal(errors.New("unable to get initial admin bank auth token"), map[string]string{})
+	}
+
 	authTokenResp := AuthTokenResponse{}
 	json.NewDecoder(resp.Body).Decode(&authTokenResp)
 	io.Copy(ioutil.Discard, resp.Body)
 	resp.Body.Close()
 	adminBearerToken := fmt.Sprintf("Bearer %v", authTokenResp.AuthToken.Token)
 
-	numBanks := 100
+	numBanks := 10
 	bankBearerTokens := make([]string, numBanks)
 	errGroup := new(errgroup.Group)
 	errGroup.SetLimit(concurrency)
@@ -95,6 +100,9 @@ func main() {
 			if err != nil {
 				return err
 			}
+			if resp.StatusCode != http.StatusAccepted {
+				logger.PrintFatal(errors.New("unable to create bank"), map[string]string{})
+			}
 			io.Copy(ioutil.Discard, resp.Body)
 			resp.Body.Close()
 
@@ -110,11 +118,15 @@ func main() {
 				return err
 			}
 
+			if resp.StatusCode != http.StatusAccepted {
+				logger.PrintFatal(errors.New("unable to get admin auth token"), map[string]string{})
+			}
+
 			authTokenResp := AuthTokenResponse{}
 			json.NewDecoder(response.Body).Decode(&authTokenResp)
 			io.Copy(ioutil.Discard, resp.Body)
 			response.Body.Close()
-			bearerToken := fmt.Sprintf("%vBearer %v", i, authTokenResp.AuthToken.Token)
+			bearerToken := fmt.Sprintf("Bearer %v", authTokenResp.AuthToken.Token)
 			bankBearerTokens[i] = bearerToken
 			return nil
 		})
@@ -123,14 +135,15 @@ func main() {
 	if err != nil {
 		logger.PrintFatal(errors.New("unable to create banks"), map[string]string{"error": err.Error()})
 	}
-	fmt.Printf("done creating banks, took %v\n", time.Since(start))
+	fmt.Printf("done creating %v banks, took %v\n", numBanks, time.Since(start))
 	start = time.Now()
 
 	// create test accounts
+	numAccounts := 1000
 	for i := 0; i < 1000; i++ {
 		i := i
 		errGroup.Go(func() error {
-			json_data, err := json.Marshal(map[string]any{"metadata": `{"mykey": "myval"}`})
+			json_data, err := json.Marshal(map[string]any{"metadata": fmt.Sprintf(`{"lat": %v, "lng": %v}`, rand.Intn(45), rand.Intn(45))})
 			if err != nil {
 				return err
 			}
@@ -140,18 +153,23 @@ func main() {
 			}
 
 			randomBearerTokenIndex := rand.Intn(numBanks)
-
 			r.Header.Add("Authorization", bankBearerTokens[randomBearerTokenIndex])
 
 			resp, err := client.Do(r)
 			if err != nil {
 				return err
 			}
+			if resp.StatusCode != http.StatusCreated {
+				logger.PrintFatal(errors.New("unable to get auth token for bank"), map[string]string{})
+			}
 			io.Copy(ioutil.Discard, resp.Body)
 			resp.Body.Close()
 
+			time.Sleep(time.Second * 1)
+
 			// change money supply by adding to account
-			json_data, err = json.Marshal(map[string]any{"id": i + 1, "change_in_cents": 100000000})
+			data := map[string]any{"id": i + 1, "change_in_cents": 100000000}
+			json_data, err = json.Marshal(data)
 			if err != nil {
 				return err
 			}
@@ -166,6 +184,16 @@ func main() {
 			if err != nil {
 				return err
 			}
+			if resp.StatusCode != http.StatusOK {
+
+				bodyBytes, err := io.ReadAll(resp.Body)
+				if err != nil {
+					log.Fatal(err)
+				}
+				bodyString := string(bodyBytes)
+				fmt.Println(data)
+				logger.PrintFatal(errors.New("unable to change money supply"), map[string]string{"error": bodyString})
+			}
 			io.Copy(ioutil.Discard, resp.Body)
 			resp.Body.Close()
 			return nil
@@ -175,11 +203,12 @@ func main() {
 	if err != nil {
 		logger.PrintFatal(errors.New("unable to create accounts"), map[string]string{"error": err.Error()})
 	}
-	fmt.Printf("done creating accounts, took %v\n", time.Since(start))
+	fmt.Printf("done creating %v accounts, took %v\n", numAccounts, time.Since(start))
 	start = time.Now()
 
 	// // create test transactions
-	for i := 0; i < 200000; i++ {
+	numTransactions := 100000
+	for i := 0; i < numTransactions; i++ {
 		i := i
 		errGroup.Go(func() error {
 			sourceId := rand.Intn(1000)
@@ -204,7 +233,7 @@ func main() {
 			resp.Body.Close()
 
 			if i%1000 == 0 {
-				fmt.Println(i)
+				fmt.Printf("finished %v transfers\n", i)
 			}
 			return nil
 		})
@@ -214,5 +243,5 @@ func main() {
 	if err != nil {
 		logger.PrintFatal(errors.New("unable to create transfers"), map[string]string{"error": err.Error()})
 	}
-	fmt.Printf("done creating transfers, took %v\n", time.Since(start))
+	fmt.Printf("done creating %v transfers, took %v, at a rate of %v per second\n", numTransactions, time.Since(start), numTransactions/int(time.Duration(time.Since(start)).Seconds()))
 }

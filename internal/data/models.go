@@ -23,7 +23,7 @@ func NewModels(db *sql.DB, cache *redis.Client) Models {
 	return Models{
 		Tokens:    TokenModel{Db: db, Cache: cache},
 		Banks:     BankModel{Db: db, Cache: cache},
-		Accounts:  AccountModel{Db: db},
-		Transfers: TransferModel{Db: db},
+		Accounts:  AccountModel{Db: db, Cache: cache},
+		Transfers: TransferModel{Db: db, Cache: cache},
 	}
 }

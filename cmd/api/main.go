@@ -185,6 +185,7 @@ func openCache(cfg config) (*redis.Client, error) {
 		Addr:     address,
 		Password: cfg.cache.password,
 		DB:       cfg.cache.db,
+		PoolSize: 100,
 	})
 
 	err := client.Ping(context.Background()).Err()
