@@ -187,11 +187,6 @@ func main() {
 				logger.PrintFatal(errors.New("unable to perform new transfer request"), map[string]string{"error": err.Error()})
 			}
 
-			// _, err = ioutil.ReadAll(resp.Body)
-			// if err != nil {
-			// 	logger.PrintFatal(errors.New("unable to read transfer response"), map[string]string{"error": err.Error()})
-			// }
-
 			if i%1000 == 0 {
 				fmt.Println(i)
 			}
