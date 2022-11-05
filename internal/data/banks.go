@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -71,12 +70,7 @@ func (m BankModel) Insert(bank *Bank) error {
 
 	_, err := m.Db.ExecContext(ctx, query, args...)
 	if err != nil {
-		switch {
-		case strings.HasPrefix(err.Error(), "Error 1062"):
-			return ErrDuplicateUsername
-		default:
-			return err
-		}
+		return err
 	}
 
 	return nil
@@ -149,6 +143,7 @@ func (m BankModel) Update(bank *Bank) error {
 }
 
 func (m BankModel) GetByToken(tokenScope, tokenPlaintext string) (*Bank, error) {
+	// gets a bank by the token provided in the bearer header
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -167,6 +162,7 @@ func (m BankModel) GetByToken(tokenScope, tokenPlaintext string) (*Bank, error) 
 		}
 	}
 
+	// check bank data coming out of cache
 	username, ok := bankMap["username"]
 	if !ok {
 		return nil, fmt.Errorf("bank username not stored in token hash")
@@ -232,6 +228,7 @@ func (m BankModel) GetByToken(tokenScope, tokenPlaintext string) (*Bank, error) 
 }
 
 func (m BankModel) GetByTokenForAuthentication(tokenScope, tokenPlaintext string) (*Bank, error) {
+	// gets a bank by the token provided in the bearer header
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

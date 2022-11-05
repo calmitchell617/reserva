@@ -21,7 +21,7 @@ const (
 
 type Token struct {
 	Plaintext    string    `json:"token"`
-	Hash         []byte    `json:"-"`
+	Hash         []byte    `json:"-"` // stored as a sha-256 hash
 	BankUsername string    `json:"-"`
 	Expiry       time.Time `json:"expiry"`
 	Admin        bool      `json:"-"`
@@ -34,6 +34,7 @@ func generateToken(bank *Bank, ttl time.Duration) (*Token, error) {
 		Admin:        bank.Admin,
 	}
 
+	// get random data
 	randomBytes := make([]byte, 16)
 
 	_, err := rand.Read(randomBytes)
@@ -41,8 +42,10 @@ func generateToken(bank *Bank, ttl time.Duration) (*Token, error) {
 		return nil, err
 	}
 
+	// encode the random bytes to plaintext
 	token.Plaintext = base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(randomBytes)
 
+	// hash it to store in the cache
 	hash := sha256.Sum256([]byte(token.Plaintext))
 	token.Hash = hash[:]
 
@@ -70,6 +73,8 @@ func (m TokenModel) New(bank *Bank, ttl time.Duration) (*Token, error) {
 }
 
 func (m TokenModel) Insert(token *Token) error {
+	// stores tokens in the cache as a hash map
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -88,33 +93,10 @@ func (m TokenModel) Insert(token *Token) error {
 		return fmt.Errorf("unable to insert into token cache, err: %v", err)
 	}
 
+	// token should expire
 	err = m.Cache.ExpireAt(ctx, tokenKey, token.Expiry).Err()
 	if err != nil {
 		return fmt.Errorf("unable to set token expiry, err: %v", err)
 	}
 	return nil
 }
-
-// func (m TokenModel) DeleteAllForBank(bankUsername string) error {
-// 	query := `
-//         DELETE FROM tokens
-//         WHERE scope = $1 AND bank_id = $2`
-
-// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-// 	defer cancel()
-
-// 	_, err := m.Db.ExecContext(ctx, query, scope, bankID)
-// 	return err
-// }
-
-// func (m TokenModel) CheckAdminToken(token string) (bool, error) {
-// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-// 	defer cancel()
-
-// 	adminToken, err := m.Cache.Get(ctx, "admin-token").Result()
-// 	if err != nil {
-// 		return false, err
-// 	}
-
-// 	return adminToken == fmt.Sprint(sha256.Sum256([]byte(token))), nil
-// }

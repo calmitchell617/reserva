@@ -48,9 +48,9 @@ func (app *application) createTransferHandler(w http.ResponseWriter, r *http.Req
 	transfer, err = app.models.Transfers.Insert(transfer, *requestingBank)
 	if err != nil {
 		switch {
-		case errors.Is(err, data.NoPermission):
+		case errors.Is(err, data.ErrNoPermission):
 			app.notPermittedResponse(w, r)
-		case errors.Is(err, data.InsufficentFunds):
+		case errors.Is(err, data.ErrInsufficentFunds):
 			app.insufficentFundsResponse(w, r)
 		default:
 			app.serverErrorResponse(w, r, err)

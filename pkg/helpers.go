@@ -8,6 +8,7 @@ import (
 )
 
 func RandomCharacters(length int) (string, error) {
+	// used to generate random alphanumeric characters
 	randomString := ""
 
 	possibleCharacters := []string{
@@ -88,10 +89,12 @@ func RandomCharacters(length int) (string, error) {
 }
 
 func IsAlphanumeric(word string) bool {
+	// checks if a string is only alphanumeric characters for validation purposes
 	return regexp.MustCompile(`^[a-zA-Z0-9]*$`).MatchString(word)
 }
 
 func IsJSON(str string) bool {
+	// checks if a string is valid json
 	var js json.RawMessage
 	return json.Unmarshal([]byte(str), &js) == nil
 }

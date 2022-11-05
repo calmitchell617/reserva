@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	NoPermission     = errors.New("you do not have permission to make a transfer from this account")
-	InsufficentFunds = errors.New("there are not enough funds to complete this tranactions")
+	ErrNoPermission     = errors.New("you do not have permission to make a transfer from this account")
+	ErrInsufficentFunds = errors.New("there are not enough funds to complete this tranactions")
 )
 
 type Transfer struct {
@@ -38,21 +38,24 @@ type TransferModel struct {
 }
 
 func (m TransferModel) Insert(transfer *Transfer, requestingBank Bank) (*Transfer, error) {
+	// Creates a new transfer
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// admin central bank can make a transfer from anywhere
 	if !requestingBank.Admin {
+		// if not admin, transfer can only be initiated by controlling bank of source account
 		sourceControllingBank, err := m.Cache.Get(ctx, fmt.Sprintf("accounts/controlling_bank/%v", transfer.SourceAccountId)).Result()
 		if err != nil {
 			return nil, fmt.Errorf("unable to get source controlling bank, err: %v", err)
 		}
 
 		if sourceControllingBank != requestingBank.Username {
-			return nil, NoPermission
+			return nil, ErrNoPermission
 		}
 	}
 
+	// check sufficient funds
 	sourceBalanceInCentsString, err := m.Cache.Get(ctx, fmt.Sprintf("accounts/%v", transfer.SourceAccountId)).Result()
 	if err != nil {
 		return nil, fmt.Errorf("unable to check source balance_in_cents in cache, err: %v", err)
@@ -64,9 +67,10 @@ func (m TransferModel) Insert(transfer *Transfer, requestingBank Bank) (*Transfe
 	}
 
 	if sourceBalanceInCents < transfer.AmountInCents {
-		return nil, InsufficentFunds
+		return nil, ErrInsufficentFunds
 	}
 
+	// insert into Singlestore
 	query := `
         INSERT INTO transfers (source_account_id, target_account_id, amount_in_cents, created_at)
         VALUES (?, ?, ?, ?)`
@@ -78,6 +82,7 @@ func (m TransferModel) Insert(transfer *Transfer, requestingBank Bank) (*Transfe
 		return nil, fmt.Errorf("unable to run transfer insertion query, err: %v", err)
 	}
 
+	// change account transfers in cache
 	err = m.Cache.DecrBy(ctx, fmt.Sprintf("accounts/%v", transfer.SourceAccountId), transfer.AmountInCents).Err()
 	if err != nil {
 		return nil, fmt.Errorf("unable to increment source account balance, err: %v", err)

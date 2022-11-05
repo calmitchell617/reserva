@@ -1,5 +1,7 @@
 package data
 
+// this file allows use to inject the DB and cache objects into the data handlers
+
 import (
 	"database/sql"
 	"errors"

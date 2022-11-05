@@ -13,16 +13,6 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-// import (
-// 	"context"
-// 	"database/sql"
-// 	"errors"
-// 	"fmt"
-// 	"time"
-
-// 	"github.com/calmitchell617/reserva/internal/validator"
-// )
-
 type Account struct {
 	Id              int64  `json:"id"`
 	ControllingBank string `json:"controlling_bank"`
@@ -67,11 +57,13 @@ func (m AccountModel) Insert(account *Account) (int64, error) {
 		return 0, fmt.Errorf("unable to get bankId for last account insertion, err: %v", err)
 	}
 
+	// add account (and balance) to cache
 	err = m.Cache.Set(ctx, fmt.Sprintf("accounts/%v", accountId), 0, 0).Err()
 	if err != nil {
 		return 0, fmt.Errorf("unable to set balance_in_cents in cache for last account creation, err: %v", err)
 	}
 
+	// add accounts controlling bank to cache
 	err = m.Cache.Set(ctx, fmt.Sprintf("accounts/controlling_bank/%v", accountId), account.ControllingBank, 0).Err()
 	if err != nil {
 		return 0, fmt.Errorf("unable to set balance_in_cents in cache for last account creation, err: %v", err)
@@ -112,6 +104,7 @@ func (m AccountModel) Get(id int64) (*Account, error) {
 		}
 	}
 
+	// get accounts balance from cache
 	balanceInCents, err := m.Cache.Get(ctx, fmt.Sprintf("accounts/%v", account.Id)).Result()
 	if err != nil {
 		return nil, err
@@ -152,6 +145,7 @@ func (m AccountModel) Update(account *Account) error {
 		}
 	}
 
+	// update accounts balance in cache
 	err = m.Cache.Set(ctx, fmt.Sprintf("accounts/%v", account.Id), account.BalanceInCents, 0).Err()
 	if err != nil {
 		return fmt.Errorf("unable to set balance_in_cents in cache for last account creation, err: %v", err)
