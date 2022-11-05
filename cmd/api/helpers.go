@@ -8,16 +8,14 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
-
-	"github.com/calmitchell617/reserva/internal/validator"
 
 	"github.com/julienschmidt/httprouter"
 )
 
 func (app *application) readUsernameParam(r *http.Request) (string, error) {
+	// get username from route
 	params := httprouter.ParamsFromContext(r.Context())
 
 	username := params.ByName("username")
@@ -28,6 +26,7 @@ func (app *application) readUsernameParam(r *http.Request) (string, error) {
 }
 
 func (app *application) readIDParam(r *http.Request) (int64, error) {
+	// get id from route
 	params := httprouter.ParamsFromContext(r.Context())
 
 	id, err := strconv.ParseInt(params.ByName("id"), 10, 64)
@@ -41,11 +40,15 @@ func (app *application) readIDParam(r *http.Request) (int64, error) {
 type envelope map[string]interface{}
 
 func (app *application) writeJSON(w http.ResponseWriter, status int, data envelope, headers http.Header) error {
+	// respond with prettified JSON
+
+	// indent
 	js, err := json.MarshalIndent(data, "", "\t")
 	if err != nil {
 		return err
 	}
 
+	// newlines
 	js = append(js, '\n')
 
 	for key, value := range headers {
@@ -60,10 +63,14 @@ func (app *application) writeJSON(w http.ResponseWriter, status int, data envelo
 }
 
 func (app *application) readJSON(w http.ResponseWriter, r *http.Request, dst interface{}) error {
+
+	// set max incoming bytes
 	maxBytes := 1_048_576
 	r.Body = http.MaxBytesReader(w, r.Body, int64(maxBytes))
 
 	dec := json.NewDecoder(r.Body)
+
+	// only allow fields specified in Go's struct tags to be decoded
 	dec.DisallowUnknownFields()
 
 	err := dec.Decode(dst)
@@ -111,74 +118,7 @@ func (app *application) readJSON(w http.ResponseWriter, r *http.Request, dst int
 	return nil
 }
 
-func (app *application) readString(qs url.Values, key string, defaultValue string) string {
-	s := qs.Get(key)
-
-	if s == "" {
-		return defaultValue
-	}
-
-	return s
-}
-
-func (app *application) readCSV(qs url.Values, key string, defaultValue []string) []string {
-	csv := qs.Get(key)
-
-	if csv == "" {
-		return defaultValue
-	}
-
-	return strings.Split(csv, ",")
-}
-
-func (app *application) readInt(qs url.Values, key string, defaultValue int, v *validator.Validator) int {
-	s := qs.Get(key)
-
-	if s == "" {
-		return defaultValue
-	}
-
-	i, err := strconv.Atoi(s)
-	if err != nil {
-		v.AddError(key, "must be an integer value")
-		return defaultValue
-	}
-
-	return i
-}
-
-func (app *application) readBool(qs url.Values, key string, defaultValue bool, v *validator.Validator) bool {
-	s := qs.Get(key)
-
-	if s == "" {
-		return defaultValue
-	}
-
-	i, err := strconv.ParseBool(s)
-	if err != nil {
-		v.AddError(key, "must be a boolean value")
-		return defaultValue
-	}
-
-	return i
-}
-
-func (app *application) background(fn func()) {
-	app.wg.Add(1)
-
-	go func() {
-
-		defer app.wg.Done()
-
-		defer func() {
-			if err := recover(); err != nil {
-				app.logger.PrintError(fmt.Errorf("%s", err), nil)
-			}
-		}()
-
-		fn()
-	}()
-}
+// A bunch of stuff to do with cards that I'd like to implement, but didn't have time
 
 func generateCardNumber() (int64, error) {
 	var cardNumber int64
@@ -228,6 +168,8 @@ func checksum(n int64) int64 {
 }
 
 func getLuhn(n int64) int64 {
+	// credit card numbers are usually "luhn" numbers, which are numbers that conform
+	// to a certain checksum algorithm
 	cn := checksum(n)
 
 	if cn == 0 {

@@ -9,9 +9,12 @@ import (
 )
 
 func (app *application) registerBankHandler(w http.ResponseWriter, r *http.Request) {
+	// Creates a bank (which is essentially a user)
+	// this route is only accessible by admin banks
+
 	var input struct {
 		Username string `json:"username"`
-		Admin    bool   `json:"admin"`
+		Admin    bool   `json:"admin"` // This determines whether a bank is a "central bank"
 		Password string `json:"password"`
 	}
 
@@ -32,6 +35,7 @@ func (app *application) registerBankHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// validate bank object
 	v := validator.New()
 
 	if data.ValidateBank(v, bank); !v.Valid() {
@@ -39,6 +43,7 @@ func (app *application) registerBankHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// insert it into DB
 	err = app.models.Banks.Insert(bank)
 	if err != nil {
 		switch {
@@ -51,6 +56,7 @@ func (app *application) registerBankHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// write response
 	err = app.writeJSON(w, http.StatusAccepted, envelope{"bank": bank}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -58,19 +64,26 @@ func (app *application) registerBankHandler(w http.ResponseWriter, r *http.Reque
 }
 
 func (app *application) showBankHandler(w http.ResponseWriter, r *http.Request) {
+	// get a current banks info
+	// only admin banks or the bank itself can read its own info
+
+	// get banks username from route
 	username, err := app.readUsernameParam(r)
 	if err != nil {
 		app.notFoundResponse(w, r)
 		return
 	}
 
+	// get requesting bank
 	requestingBank := app.contextGetBank(r)
 
+	// if they are not the same bank AND the requesting bank isn't an admin, exit
 	if !requestingBank.Admin && requestingBank.Username != username {
 		app.notPermittedResponse(w, r)
 		return
 	}
 
+	// get banks info from DB
 	bank, err := app.models.Banks.GetByUsername(username)
 	if err != nil {
 		switch {
@@ -82,6 +95,7 @@ func (app *application) showBankHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// write response
 	err = app.writeJSON(w, http.StatusOK, envelope{"bank": bank}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)

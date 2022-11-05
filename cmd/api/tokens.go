@@ -1,5 +1,7 @@
 package main
 
+// contains route that creates authentication tokens
+
 import (
 	"errors"
 	"net/http"
@@ -23,6 +25,7 @@ func (app *application) createAuthenticationTokenHandler(w http.ResponseWriter, 
 
 	v := validator.New()
 
+	// validate the password plaintext
 	data.ValidatePasswordPlaintext(v, input.Password)
 
 	if !v.Valid() {
@@ -30,6 +33,7 @@ func (app *application) createAuthenticationTokenHandler(w http.ResponseWriter, 
 		return
 	}
 
+	// get the bank
 	bank, err := app.models.Banks.GetByUsername(input.Username)
 	if err != nil {
 		switch {
@@ -41,6 +45,7 @@ func (app *application) createAuthenticationTokenHandler(w http.ResponseWriter, 
 		return
 	}
 
+	// check the password with bcrypt checker
 	match, err := bank.Password.Matches(input.Password)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -52,6 +57,7 @@ func (app *application) createAuthenticationTokenHandler(w http.ResponseWriter, 
 		return
 	}
 
+	// if it passed, create a new token, hash / store in DB, and send the plaintext back
 	token, err := app.models.Tokens.New(bank, 8*24*time.Hour)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)

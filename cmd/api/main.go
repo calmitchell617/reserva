@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 
 	"github.com/calmitchell617/reserva/internal/data"
 	"github.com/calmitchell617/reserva/internal/jsonlog"
-	"github.com/calmitchell617/reserva/internal/vcs" // New import
+	"github.com/calmitchell617/reserva/internal/vcs"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -51,16 +50,20 @@ type config struct {
 	}
 }
 
+// the application struct is a dependency injection technique that
+// allows you to add functionality to handlers without having global
+// variables all over the place
 type application struct {
 	config config
 	logger *jsonlog.Logger
 	models data.Models
-	// mailer mailer.Mailer
-	wg sync.WaitGroup
+	wg     sync.WaitGroup
 }
 
 func main() {
 	var cfg config
+
+	// get and parse server command line flags
 
 	flag.IntVar(&cfg.port, "port", 80, "API server port")
 	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
@@ -78,11 +81,6 @@ func main() {
 	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", false, "Enable rate limiter")
 	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum requests per second")
 	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
-
-	flag.Func("cors-trusted-origins", "Trusted CORS origins (space separated)", func(val string) error {
-		cfg.cors.trustedOrigins = strings.Fields(val)
-		return nil
-	})
 
 	displayVersion := flag.Bool("version", false, "Display version and exit")
 
@@ -108,8 +106,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	// we will use a custom JSON logger
 	logger := jsonlog.New(os.Stdout, jsonlog.LevelInfo)
 
+	// open Singlestore and Redis connections
 	db, err := openDB(cfg)
 	if err != nil {
 		logger.PrintFatal(err, nil)
@@ -126,6 +126,7 @@ func main() {
 
 	expvar.NewString("version").Set(version)
 
+	// Publish some stats for telemetry / monitoring
 	expvar.Publish("goroutines", expvar.Func(func() interface{} {
 		return runtime.NumGoroutine()
 	}))
@@ -138,12 +139,14 @@ func main() {
 		return time.Now().Unix()
 	}))
 
+	// initialize application struct
 	app := &application{
 		config: cfg,
 		logger: logger,
 		models: data.NewModels(db, cache),
 	}
 
+	// start it up!
 	err = app.serve()
 	if err != nil {
 		logger.PrintFatal(err, nil)
@@ -151,6 +154,7 @@ func main() {
 }
 
 func openDB(cfg config) (*sql.DB, error) {
+	// opens singlestore connection
 	db, err := sql.Open("mysql", cfg.db.dsn)
 	if err != nil {
 		return nil, err
@@ -169,6 +173,7 @@ func openDB(cfg config) (*sql.DB, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// check that we can actually connect to the DB
 	err = db.PingContext(ctx)
 	if err != nil {
 		return nil, err
@@ -178,6 +183,7 @@ func openDB(cfg config) (*sql.DB, error) {
 }
 
 func openCache(cfg config) (*redis.Client, error) {
+	// opens Redis connection
 
 	address := fmt.Sprintf("%v:%v", cfg.cache.host, cfg.cache.port)
 
@@ -188,6 +194,7 @@ func openCache(cfg config) (*redis.Client, error) {
 		PoolSize: 100,
 	})
 
+	// check that we can actually connect to Redis
 	err := client.Ping(context.Background()).Err()
 	if err != nil {
 		return nil, err

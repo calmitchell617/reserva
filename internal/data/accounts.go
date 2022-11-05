@@ -67,9 +67,12 @@ func (m AccountModel) Insert(account *Account) (int64, error) {
 		return 0, fmt.Errorf("unable to get bankId for last account insertion, err: %v", err)
 	}
 
-	// fmt.Printf("accounts/%v\n", accountId)
-
 	err = m.Cache.Set(ctx, fmt.Sprintf("accounts/%v", accountId), 0, 0).Err()
+	if err != nil {
+		return 0, fmt.Errorf("unable to set balance_in_cents in cache for last account creation, err: %v", err)
+	}
+
+	err = m.Cache.Set(ctx, fmt.Sprintf("accounts/controlling_bank/%v", accountId), account.ControllingBank, 0).Err()
 	if err != nil {
 		return 0, fmt.Errorf("unable to set balance_in_cents in cache for last account creation, err: %v", err)
 	}

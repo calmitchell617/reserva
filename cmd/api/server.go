@@ -12,16 +12,18 @@ import (
 )
 
 func (app *application) serve() error {
+	// initialize server config
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", app.config.port),
-		Handler: app.routes(),
-		// IdleTimeout:  time.Minute,
-		// ReadTimeout:  10 * time.Second,
-		// WriteTimeout: 30 * time.Second,
+		Addr:         fmt.Sprintf(":%d", app.config.port),
+		Handler:      app.routes(),
+		IdleTimeout:  time.Minute,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
 	}
 
 	shutdownError := make(chan error)
 
+	// start the server async (allows use to do graceful shutdown)
 	go func() {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

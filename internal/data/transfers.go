@@ -12,6 +12,11 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
+var (
+	NoPermission     = errors.New("you do not have permission to make a transfer from this account")
+	InsufficentFunds = errors.New("there are not enough funds to complete this tranactions")
+)
+
 type Transfer struct {
 	Id              int64     `json:"id"`
 	SourceAccountId int64     `json:"source_account_id"`
@@ -36,6 +41,18 @@ func (m TransferModel) Insert(transfer *Transfer, requestingBank Bank) (*Transfe
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// admin central bank can make a transfer from anywhere
+	if !requestingBank.Admin {
+		sourceControllingBank, err := m.Cache.Get(ctx, fmt.Sprintf("accounts/controlling_bank/%v", transfer.SourceAccountId)).Result()
+		if err != nil {
+			return nil, fmt.Errorf("unable to get source controlling bank, err: %v", err)
+		}
+
+		if sourceControllingBank != requestingBank.Username {
+			return nil, NoPermission
+		}
+	}
+
 	sourceBalanceInCentsString, err := m.Cache.Get(ctx, fmt.Sprintf("accounts/%v", transfer.SourceAccountId)).Result()
 	if err != nil {
 		return nil, fmt.Errorf("unable to check source balance_in_cents in cache, err: %v", err)
@@ -47,7 +64,7 @@ func (m TransferModel) Insert(transfer *Transfer, requestingBank Bank) (*Transfe
 	}
 
 	if sourceBalanceInCents < transfer.AmountInCents {
-		return nil, errors.New("insufficient funds for the transaction")
+		return nil, InsufficentFunds
 	}
 
 	query := `

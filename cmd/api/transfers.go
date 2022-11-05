@@ -1,6 +1,9 @@
 package main
 
+// contains handler to create money transfers
+
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -11,6 +14,7 @@ import (
 )
 
 func (app *application) createTransferHandler(w http.ResponseWriter, r *http.Request) {
+	// only controlling bank can initiate a transfer from a given account
 	requestingBank := app.contextGetBank(r)
 
 	var input struct {
@@ -32,6 +36,7 @@ func (app *application) createTransferHandler(w http.ResponseWriter, r *http.Req
 		CreatedAt:       time.Now(),
 	}
 
+	// validate transfer object
 	v := validator.New()
 
 	if data.ValidateTransfer(v, transfer); !v.Valid() {
@@ -39,9 +44,17 @@ func (app *application) createTransferHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// insert the transfer
 	transfer, err = app.models.Transfers.Insert(transfer, *requestingBank)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		switch {
+		case errors.Is(err, data.NoPermission):
+			app.notPermittedResponse(w, r)
+		case errors.Is(err, data.InsufficentFunds):
+			app.insufficentFundsResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
 		return
 	}
 

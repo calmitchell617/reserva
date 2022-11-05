@@ -1,13 +1,13 @@
 package main
 
+// This program adds a bank to the Singlestore backend DB
+
 import (
 	"context"
 	"database/sql"
-	"expvar"
 	"flag"
 	"fmt"
 	"os"
-	"runtime"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -47,6 +47,7 @@ type config struct {
 func main() {
 	var cfg config
 
+	// Get command line flags
 	flag.StringVar(&cfg.db.dsn, "db-dsn", "", "DB DSN")
 	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "DB max open connections")
 	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "DB max idle connections")
@@ -90,32 +91,21 @@ func main() {
 
 	logger := jsonlog.New(os.Stdout, jsonlog.LevelInfo)
 
+	// Open DB connection
 	db, err := openDB(cfg)
 	if err != nil {
 		logger.PrintFatal(err, nil)
 	}
 	defer db.Close()
 
+	// Open cache connection
 	cache, err := openCache(cfg)
 	if err != nil {
 		logger.PrintFatal(err, nil)
 	}
 	defer cache.Close()
 
-	expvar.NewString("version").Set(version)
-
-	expvar.Publish("goroutines", expvar.Func(func() interface{} {
-		return runtime.NumGoroutine()
-	}))
-
-	expvar.Publish("database", expvar.Func(func() interface{} {
-		return db.Stats()
-	}))
-
-	expvar.Publish("timestamp", expvar.Func(func() interface{} {
-		return time.Now().Unix()
-	}))
-
+	// Create the new bank object
 	bank := &data.Bank{
 		Username: cfg.bank.username,
 		Admin:    cfg.bank.admin,
@@ -126,6 +116,7 @@ func main() {
 		logger.PrintFatal(fmt.Errorf("unable to set bank password, err: %v", err), nil)
 	}
 
+	// Validate the bank
 	v := validator.New()
 
 	if data.ValidateBank(v, bank); !v.Valid() {
@@ -134,6 +125,7 @@ func main() {
 
 	models := data.NewModels(db, cache)
 
+	// Insert the bank then exit the program
 	err = models.Banks.Insert(bank)
 	if err != nil {
 		logger.PrintFatal(fmt.Errorf("unable to insert bank into DB, err: %v", err), nil)

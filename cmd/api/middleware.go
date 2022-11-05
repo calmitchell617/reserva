@@ -19,6 +19,8 @@ import (
 )
 
 func (app *application) recoverPanic(next http.Handler) http.Handler {
+	// Don't panic
+	// 42
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
@@ -32,6 +34,8 @@ func (app *application) recoverPanic(next http.Handler) http.Handler {
 }
 
 func (app *application) rateLimit(next http.Handler) http.Handler {
+	// Someone will definitely try to DDOS any central bank digital currency
+	// This implements token bucket rate limiting technique
 	type client struct {
 		limiter  *rate.Limiter
 		lastSeen time.Time
@@ -86,17 +90,21 @@ func (app *application) rateLimit(next http.Handler) http.Handler {
 }
 
 func (app *application) authenticate(next http.Handler) http.Handler {
+	// Check what bank is making this request, add that bank object to the request context
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Vary", "Authorization")
 
 		authorizationHeader := r.Header.Get("Authorization")
 
 		if authorizationHeader == "" {
+			// if there is no bearer token, then it is an anonymous request
 			r = app.contextSetBank(r, data.AnonymousBank)
 			next.ServeHTTP(w, r)
 			return
 		}
 
+		// get the bearer token and split them up
 		headerParts := strings.Split(authorizationHeader, " ")
 		if len(headerParts) != 2 || headerParts[0] != "Bearer" {
 			app.invalidAuthenticationTokenResponse(w, r)
@@ -105,6 +113,7 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 
 		token := headerParts[1]
 
+		// validate the token
 		v := validator.New()
 
 		if data.ValidateTokenPlaintext(v, token); !v.Valid() {
@@ -112,9 +121,11 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 			return
 		}
 
+		// get the bank from that token
 		bank, err := app.models.Banks.GetByTokenForAuthentication(data.ScopeAuthentication, token)
 		if err != nil {
 			switch {
+			// if there is no bank that matches, send invalid credentials response
 			case errors.Is(err, data.ErrRecordNotFound):
 				app.invalidAuthenticationTokenResponse(w, r)
 			default:
@@ -123,6 +134,7 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 			return
 		}
 
+		// set the context's bank object and pass it along
 		r = app.contextSetBank(r, bank)
 
 		next.ServeHTTP(w, r)
@@ -130,6 +142,7 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 }
 
 func (app *application) requireAuthenticatedBank(next http.HandlerFunc) http.HandlerFunc {
+	// This requires an authenticated (non anonymous) bank
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		bank := app.contextGetBank(r)
 
@@ -143,6 +156,7 @@ func (app *application) requireAuthenticatedBank(next http.HandlerFunc) http.Han
 }
 
 func (app *application) requireAdminBank(next http.HandlerFunc) http.HandlerFunc {
+	// requies a bank that has admin priviledges
 	fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		bank := app.contextGetBank(r)
 
@@ -157,38 +171,8 @@ func (app *application) requireAdminBank(next http.HandlerFunc) http.HandlerFunc
 	return app.requireAuthenticatedBank(fn)
 }
 
-func (app *application) enableCORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Vary", "Origin")
-
-		w.Header().Add("Vary", "Access-Control-Request-Method")
-
-		origin := r.Header.Get("Origin")
-
-		if origin != "" {
-			for i := range app.config.cors.trustedOrigins {
-				if origin == app.config.cors.trustedOrigins[i] {
-					w.Header().Set("Access-Control-Allow-Origin", origin)
-
-					if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
-
-						w.Header().Set("Access-Control-Allow-Methods", "OPTIONS, PUT, PATCH, DELETE")
-						w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-
-						w.WriteHeader(http.StatusOK)
-						return
-					}
-
-					break
-				}
-			}
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
 func (app *application) metrics(next http.Handler) http.Handler {
+	// publish some stats for telemtry
 	totalRequestsReceived := expvar.NewInt("total_requests_received")
 	totalResponsesSent := expvar.NewInt("total_responses_sent")
 	totalProcessingTimeMicroseconds := expvar.NewInt("total_processing_time_μs")
