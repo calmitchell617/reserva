@@ -14,10 +14,10 @@ admin bank = central bank
 
   ### ***Request***
   ```
-{
-  "username": <string>,
-  "admin": <boolean>
-}
+  {
+    "username": <string>,
+    "admin": <boolean>
+  }
   ```
 
   ### ***Response***
