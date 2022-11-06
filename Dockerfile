@@ -7,6 +7,7 @@ RUN go mod download && go mod verify
 
 COPY . .
 RUN go build -v -o /usr/local/bin/api ./cmd/api
-# RUN go build -ldflags="-s" -o=./bin/api ./cmd/api
+RUN go build -v -o /usr/local/bin/loadTest ./cmd/loadTest
+RUN go build -v -o /usr/local/bin/addBank ./cmd/addBank
 
-CMD ["api"]
+CMD tail -f /dev/null
