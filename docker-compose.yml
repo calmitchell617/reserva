@@ -9,9 +9,9 @@ services:
       - 3306:3306
       - 8080:8080
     container_name: singlestore
-  redis:
+  cache:
     image: redis:7
-    container_name: redis
+    container_name: cache
     ports:
       - 6379:6379
   reserva_api:
@@ -21,7 +21,7 @@ services:
       dockerfile: Dockerfile
     depends_on:
       - singlestore
-      - redis
+      - cache
     ports:
       - 80:80
   reserva_load_tester:

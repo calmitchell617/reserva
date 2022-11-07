@@ -109,7 +109,7 @@ func main() {
 	// we will use a custom JSON logger
 	logger := jsonlog.New(os.Stdout, jsonlog.LevelInfo)
 
-	// open Singlestore and Redis connections
+	// open Singlestore and cache connections
 	db, err := openDB(cfg)
 	if err != nil {
 		logger.PrintFatal(err, nil)
@@ -183,7 +183,7 @@ func openDB(cfg config) (*sql.DB, error) {
 }
 
 func openCache(cfg config) (*redis.Client, error) {
-	// opens Redis connection
+	// opens cache connection
 
 	address := fmt.Sprintf("%v:%v", cfg.cache.host, cfg.cache.port)
 
@@ -194,7 +194,7 @@ func openCache(cfg config) (*redis.Client, error) {
 		PoolSize: 100,
 	})
 
-	// check that we can actually connect to Redis
+	// check that we can actually connect to cache
 	err := client.Ping(context.Background()).Err()
 	if err != nil {
 		return nil, err
