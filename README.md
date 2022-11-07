@@ -1,8 +1,15 @@
-# Reserva public API
+# Reserva Readme
+Reserva is a functional central bank digital currency (CBDC) running on top of the SingleStore database. It is written in the Go programming language and exposes its functionality via a REST API.
+
+Reserva is a stateless web server, and thus is horizontally scalable, and suitable for deployment in containers. 
+
+You can read more about Reserva at [my website's blog](https://www.sqlpipe.com/blog/reserva-cbdc-singlestore).
+
+# API docs
 
 All routes require bearer token authentication unless otherwise noted.
 
-admin bank = central bank
+Any bank that is given "admin" permissions has the ability to change the money supply, which makes it a "central bank" in traditional economic terms.
 
 ## Banks
 ---
