@@ -5,9 +5,9 @@ Hi,
 
 Thanks for signing up for a Reserva account. We're excited to have you on board!
 
-For future reference, your caretaker ID number is {{.caretakerID}}.
+For future reference, your user ID number is {{.userID}}.
 
-Please send a request to the `PUT /api/v1/caretakers/activated` endpoint with the following JSON
+Please send a request to the `PUT /api/v1/users/activate` endpoint with the following JSON
 body to activate your account:
 
 {"token": "{{.activationToken}}"}
@@ -31,8 +31,8 @@ The Reserva Team
 <body>
     <p>Hi,</p>
     <p>Thanks for signing up for a Reserva account. We're excited to have you on board!</p>
-    <p>For future reference, your caretaker ID number is {{.caretakerID}}.</p>
-     <p>Please send a request to the <code>PUT /v1/caretakers/activated</code> endpoint with the 
+    <p>For future reference, your user ID number is {{.userID}}.</p>
+     <p>Please send a request to the <code>PUT /v1/users/activate</code> endpoint with the 
     following JSON body to activate your account:</p>
     <pre><code>
     {"token": "{{.activationToken}}"}

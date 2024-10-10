@@ -9,18 +9,18 @@ import (
 
 type contextKey string
 
-const caretakerContextKey = contextKey("caretaker")
+const userContextKey = contextKey("user")
 
-func (app *application) contextSetCaretaker(r *http.Request, caretaker *data.Caretaker) *http.Request {
-	ctx := context.WithValue(r.Context(), caretakerContextKey, caretaker)
+func (app *application) contextSetUser(r *http.Request, user *data.User) *http.Request {
+	ctx := context.WithValue(r.Context(), userContextKey, user)
 	return r.WithContext(ctx)
 }
 
-func (app *application) contextGetCaretaker(r *http.Request) *data.Caretaker {
-	caretaker, ok := r.Context().Value(caretakerContextKey).(*data.Caretaker)
+func (app *application) contextGetUser(r *http.Request) *data.User {
+	user, ok := r.Context().Value(userContextKey).(*data.User)
 	if !ok {
-		panic("missing caretaker value in request context")
+		panic("missing user value in request context")
 	}
 
-	return caretaker
+	return user
 }

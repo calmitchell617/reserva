@@ -1,1 +1,0 @@
-curl -X PUT -d '{"token": "OQDUXY3CHDBW42DEQ6PLOJHEXQ"}' http://localhost:4000/api/v1/caretakers/activated

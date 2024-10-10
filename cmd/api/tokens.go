@@ -31,7 +31,7 @@ func (app *application) createAuthenticationTokenHandler(w http.ResponseWriter, 
 		return
 	}
 
-	caretaker, err := app.models.Caretakers.GetByEmail(input.Email)
+	user, err := app.models.Users.GetByEmail(input.Email)
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrRecordNotFound):
@@ -42,7 +42,7 @@ func (app *application) createAuthenticationTokenHandler(w http.ResponseWriter, 
 		return
 	}
 
-	match, err := caretaker.Password.Matches(input.Password)
+	match, err := user.Password.Matches(input.Password)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -53,7 +53,7 @@ func (app *application) createAuthenticationTokenHandler(w http.ResponseWriter, 
 		return
 	}
 
-	token, err := app.models.Tokens.New(caretaker.ID, 24*time.Hour, data.ScopeAuthentication)
+	token, err := app.models.Tokens.New(user.ID, 24*time.Hour, data.ScopeAuthentication)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -83,7 +83,7 @@ func (app *application) createPasswordResetTokenHandler(w http.ResponseWriter, r
 		return
 	}
 
-	caretaker, err := app.models.Caretakers.GetByEmail(input.Email)
+	user, err := app.models.Users.GetByEmail(input.Email)
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrRecordNotFound):
@@ -95,13 +95,13 @@ func (app *application) createPasswordResetTokenHandler(w http.ResponseWriter, r
 		return
 	}
 
-	if !caretaker.Activated {
-		v.AddError("email", "caretaker account must be activated")
+	if !user.Active {
+		v.AddError("email", "user account must be active")
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 
-	token, err := app.models.Tokens.New(caretaker.ID, 45*time.Minute, data.ScopePasswordReset)
+	token, err := app.models.Tokens.New(user.ID, 45*time.Minute, data.ScopePasswordReset)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -112,7 +112,7 @@ func (app *application) createPasswordResetTokenHandler(w http.ResponseWriter, r
 			"passwordResetToken": token.Plaintext,
 		}
 
-		err = app.mailer.Send(caretaker.Email, "token_password_reset.tmpl", data)
+		err = app.mailer.Send(user.Email, "token_password_reset.tmpl", data)
 		if err != nil {
 			app.logger.Error(err.Error())
 		}
@@ -144,7 +144,7 @@ func (app *application) createActivationTokenHandler(w http.ResponseWriter, r *h
 		return
 	}
 
-	caretaker, err := app.models.Caretakers.GetByEmail(input.Email)
+	user, err := app.models.Users.GetByEmail(input.Email)
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrRecordNotFound):
@@ -156,13 +156,13 @@ func (app *application) createActivationTokenHandler(w http.ResponseWriter, r *h
 		return
 	}
 
-	if caretaker.Activated {
-		v.AddError("email", "caretaker has already been activated")
+	if user.Active {
+		v.AddError("email", "user has already been active")
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 
-	token, err := app.models.Tokens.New(caretaker.ID, 3*24*time.Hour, data.ScopeActivation)
+	token, err := app.models.Tokens.New(user.ID, 3*24*time.Hour, data.ScopeActivation)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -173,7 +173,7 @@ func (app *application) createActivationTokenHandler(w http.ResponseWriter, r *h
 			"activationToken": token.Plaintext,
 		}
 
-		err = app.mailer.Send(caretaker.Email, "token_activation.tmpl", data)
+		err = app.mailer.Send(user.Email, "token_activation.tmpl", data)
 		if err != nil {
 			app.logger.Error(err.Error())
 		}

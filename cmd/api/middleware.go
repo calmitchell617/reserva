@@ -91,7 +91,7 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 		authorizationHeader := r.Header.Get("Authorization")
 
 		if authorizationHeader == "" {
-			r = app.contextSetCaretaker(r, data.AnonymousCaretaker)
+			r = app.contextSetUser(r, data.AnonymousUser)
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -111,7 +111,7 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		caretaker, err := app.models.Caretakers.GetForToken(data.ScopeAuthentication, token)
+		user, err := app.models.Users.GetForToken(data.ScopeAuthentication, token)
 		if err != nil {
 			switch {
 			case errors.Is(err, data.ErrRecordNotFound):
@@ -122,17 +122,17 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		r = app.contextSetCaretaker(r, caretaker)
+		r = app.contextSetUser(r, user)
 
 		next.ServeHTTP(w, r)
 	})
 }
 
-func (app *application) requireAuthenticatedCaretaker(next http.HandlerFunc) http.HandlerFunc {
+func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		caretaker := app.contextGetCaretaker(r)
+		user := app.contextGetUser(r)
 
-		if caretaker.IsAnonymous() {
+		if user.IsAnonymous() {
 			app.authenticationRequiredResponse(w, r)
 			return
 		}
@@ -141,11 +141,11 @@ func (app *application) requireAuthenticatedCaretaker(next http.HandlerFunc) htt
 	})
 }
 
-func (app *application) requireActivatedCaretaker(next http.HandlerFunc) http.HandlerFunc {
+func (app *application) requireActiveUser(next http.HandlerFunc) http.HandlerFunc {
 	fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		caretaker := app.contextGetCaretaker(r)
+		user := app.contextGetUser(r)
 
-		if !caretaker.Activated {
+		if !user.Active {
 			app.inactiveAccountResponse(w, r)
 			return
 		}
@@ -153,28 +153,7 @@ func (app *application) requireActivatedCaretaker(next http.HandlerFunc) http.Ha
 		next.ServeHTTP(w, r)
 	})
 
-	return app.requireAuthenticatedCaretaker(fn)
-}
-
-func (app *application) requirePermission(code string, next http.HandlerFunc) http.HandlerFunc {
-	fn := func(w http.ResponseWriter, r *http.Request) {
-		caretaker := app.contextGetCaretaker(r)
-
-		permissions, err := app.models.Permissions.GetAllForCaretaker(caretaker.ID)
-		if err != nil {
-			app.serverErrorResponse(w, r, err)
-			return
-		}
-
-		if !permissions.Include(code) {
-			app.notPermittedResponse(w, r)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	}
-
-	return app.requireActivatedCaretaker(fn)
+	return app.requireAuthenticatedUser(fn)
 }
 
 func (app *application) enableCORS(next http.Handler) http.Handler {

@@ -9,7 +9,7 @@ import (
 	"github.com/calmitchell617/reserva/internal/validator"
 )
 
-func (app *application) registerCaretakerHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		ExternalID string `json:"external_id"`
 		IsAdmin    bool   `json:"is_admin"`
@@ -24,20 +24,16 @@ func (app *application) registerCaretakerHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	now := time.Now()
-
-	caretaker := &data.Caretaker{
-		ExternalID:   input.ExternalID,
-		IsAdmin:      input.IsAdmin,
-		Endpoint:     input.Endpoint,
-		Activated:    false,
-		Email:        input.Email,
-		CreatedAt:    now,
-		LastModified: now,
-		Version:      1,
+	user := &data.User{
+		ExternalID: input.ExternalID,
+		IsAdmin:    input.IsAdmin,
+		Endpoint:   input.Endpoint,
+		Active:     false,
+		Email:      input.Email,
+		Version:    1,
 	}
 
-	err = caretaker.Password.Set(input.Password)
+	err = user.Password.Set(input.Password)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -45,22 +41,22 @@ func (app *application) registerCaretakerHandler(w http.ResponseWriter, r *http.
 
 	v := validator.New()
 
-	if data.ValidateCaretaker(v, caretaker); !v.Valid() {
+	if data.ValidateUser(v, user); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 
-	err = app.models.Caretakers.Insert(caretaker)
+	err = app.models.Users.Insert(user)
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrDuplicateEmail):
-			v.AddError("email", "a caretaker with this email address already exists")
+			v.AddError("email", "a user with this email address already exists")
 			app.failedValidationResponse(w, r, v.Errors)
 		case errors.Is(err, data.ErrDuplicateExternalID):
-			v.AddError("external_id", "a caretaker with this external ID already exists")
+			v.AddError("external_id", "a user with this external ID already exists")
 			app.failedValidationResponse(w, r, v.Errors)
 		case errors.Is(err, data.ErrDuplicateEndpoint):
-			v.AddError("endpoint", "a caretaker with this endpoint already exists")
+			v.AddError("endpoint", "a user with this endpoint already exists")
 			app.failedValidationResponse(w, r, v.Errors)
 		default:
 			app.serverErrorResponse(w, r, err)
@@ -68,7 +64,7 @@ func (app *application) registerCaretakerHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	token, err := app.models.Tokens.New(caretaker.ID, 3*24*time.Hour, data.ScopeActivation)
+	token, err := app.models.Tokens.New(user.ID, 3*24*time.Hour, data.ScopeActivation)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -77,22 +73,22 @@ func (app *application) registerCaretakerHandler(w http.ResponseWriter, r *http.
 	app.background(func() {
 		data := map[string]any{
 			"activationToken": token.Plaintext,
-			"caretakerID":     caretaker.ID,
+			"userID":          user.ID,
 		}
 
-		err = app.mailer.Send(caretaker.Email, "caretaker_welcome.tmpl", data)
+		err = app.mailer.Send(user.Email, "user_welcome.tmpl", data)
 		if err != nil {
 			app.logger.Error(err.Error())
 		}
 	})
 
-	err = app.writeJSON(w, http.StatusAccepted, envelope{"caretaker": caretaker}, nil)
+	err = app.writeJSON(w, http.StatusAccepted, envelope{"user": user}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 	}
 }
 
-func (app *application) activateCaretakerHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		TokenPlaintext string `json:"token"`
 	}
@@ -110,7 +106,7 @@ func (app *application) activateCaretakerHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	caretaker, err := app.models.Caretakers.GetForToken(data.ScopeActivation, input.TokenPlaintext)
+	user, err := app.models.Users.GetForToken(data.ScopeActivation, input.TokenPlaintext)
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrRecordNotFound):
@@ -122,9 +118,9 @@ func (app *application) activateCaretakerHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	caretaker.Activated = true
+	user.Active = true
 
-	err = app.models.Caretakers.Update(caretaker)
+	err = app.models.Users.Update(user)
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrEditConflict):
@@ -135,19 +131,19 @@ func (app *application) activateCaretakerHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	err = app.models.Tokens.DeleteAllForCaretaker(data.ScopeActivation, caretaker.ID)
+	err = app.models.Tokens.DeleteAllForUser(data.ScopeActivation, user.ID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	err = app.writeJSON(w, http.StatusOK, envelope{"caretaker": caretaker}, nil)
+	err = app.writeJSON(w, http.StatusOK, envelope{"user": user}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 	}
 }
 
-func (app *application) updateCaretakerPasswordHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) updateUserPasswordHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Password       string `json:"password"`
 		TokenPlaintext string `json:"token"`
@@ -169,7 +165,7 @@ func (app *application) updateCaretakerPasswordHandler(w http.ResponseWriter, r 
 		return
 	}
 
-	caretaker, err := app.models.Caretakers.GetForToken(data.ScopePasswordReset, input.TokenPlaintext)
+	user, err := app.models.Users.GetForToken(data.ScopePasswordReset, input.TokenPlaintext)
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrRecordNotFound):
@@ -181,13 +177,13 @@ func (app *application) updateCaretakerPasswordHandler(w http.ResponseWriter, r 
 		return
 	}
 
-	err = caretaker.Password.Set(input.Password)
+	err = user.Password.Set(input.Password)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	err = app.models.Caretakers.Update(caretaker)
+	err = app.models.Users.Update(user)
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrEditConflict):
@@ -198,7 +194,7 @@ func (app *application) updateCaretakerPasswordHandler(w http.ResponseWriter, r 
 		return
 	}
 
-	err = app.models.Tokens.DeleteAllForCaretaker(data.ScopePasswordReset, caretaker.ID)
+	err = app.models.Tokens.DeleteAllForUser(data.ScopePasswordReset, user.ID)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return

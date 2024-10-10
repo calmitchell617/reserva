@@ -1,0 +1,1 @@
+curl -H 'Authorization: Bearer OYEX6ICGJJNR3LVJ3PUU73YOHQ' http://localhost:4000/api/v1/accounts/1

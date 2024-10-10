@@ -3,7 +3,7 @@
 {{define "plainBody"}}
 Hi,
 
-Please send a `PUT /api/v1/caretakers/activated` request with the following JSON body to activate your account:
+Please send a `PUT /api/v1/users/activate` request with the following JSON body to activate your account:
 
 {"token": "{{.activationToken}}"}
 
@@ -23,7 +23,7 @@ The Reserva Team
   </head>
   <body>
     <p>Hi,</p>
-    <p>Please send a <code>PUT /v1/caretakers/activated</code> request with the following JSON body to activate your account:</p>
+    <p>Please send a <code>PUT /v1/users/activate</code> request with the following JSON body to activate your account:</p>
     <pre><code>
     {"token": "{{.activationToken}}"}
     </code></pre> 
