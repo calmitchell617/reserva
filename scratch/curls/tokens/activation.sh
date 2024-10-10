@@ -1,0 +1,1 @@
+curl -d '{"email": "myemail@example.com"}' localhost:4000/api/v1/tokens/activation

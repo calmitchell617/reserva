@@ -1,0 +1,1 @@
+curl -d '{"external_id": "myid", "is_admin": false, "endpoint": "mypoint", "email": "myemail@example.com", "password": "Mypass123!"}' http://localhost:4000/api/v1/caretakers
