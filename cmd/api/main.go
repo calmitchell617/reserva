@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"os"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -48,7 +49,7 @@ func main() {
 	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 50, "PostgreSQL max idle connections")
 	flag.DurationVar(&cfg.db.maxIdleTime, "db-max-idle-time", 15*time.Minute, "PostgreSQL max connection idle time")
 
-	flag.IntVar(&cfg.iters, "iters", 20000, "Number of iterations")
+	flag.IntVar(&cfg.iters, "iters", 10000, "Number of iterations")
 	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 10, "Concurrency limit")
 
 	flag.Parse()
@@ -95,8 +96,10 @@ func main() {
 	// set limit
 	eg.SetLimit(cfg.concurrencyLimit)
 
-	// loop 1000 times
-	for i := 0; i < cfg.iters; i++ {
+	// initialize atomic counter
+	var counter int32
+
+	for int(atomic.LoadInt32(&counter)) < cfg.iters {
 
 		eg.Go(func() error {
 
@@ -107,6 +110,12 @@ func main() {
 			// ensure the users are different
 			if acquiringUser.ID == issuingUser.ID {
 				return nil
+			}
+
+			// get acquiring user from token
+			_, err := app.models.Users.GetForToken(acquiringUser.TokenHash)
+			if err != nil {
+				return err
 			}
 
 			// get the issuing account id
@@ -142,6 +151,8 @@ func main() {
 			if err != nil {
 				return err
 			}
+
+			atomic.AddInt32(&counter, 1)
 
 			return nil
 		})

@@ -2,7 +2,6 @@ package data
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"time"
@@ -78,9 +77,7 @@ ORDER BY
 	return users, nil
 }
 
-func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error) {
-	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
-
+func (m UserModel) GetForToken(tokenHash []byte) (*User, error) {
 	query := `
         SELECT users.id, users.organization_id, users.frozen
         FROM users
