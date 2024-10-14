@@ -7,21 +7,16 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"os"
 	"runtime"
-	"strings"
-	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/calmitchell617/reserva/internal/data"
-	"github.com/calmitchell617/reserva/internal/mailer"
-	"github.com/calmitchell617/reserva/internal/vcs"
 
 	_ "github.com/lib/pq"
-)
-
-var (
-	version = vcs.Version()
 )
 
 type config struct {
@@ -33,30 +28,12 @@ type config struct {
 		maxIdleConns int
 		maxIdleTime  time.Duration
 	}
-	limiter struct {
-		enabled bool
-		rps     float64
-		burst   int
-	}
-	smtp struct {
-		host     string
-		port     int
-		username string
-		password string
-		sender   string
-	}
-
-	cors struct {
-		trustedOrigins []string
-	}
+	iters            int
+	concurrencyLimit int
 }
 
 type application struct {
-	config config
-	logger *slog.Logger
 	models data.Models
-	mailer mailer.Mailer
-	wg     sync.WaitGroup
 }
 
 func main() {
@@ -67,33 +44,14 @@ func main() {
 
 	flag.StringVar(&cfg.db.dsn, "db-dsn", "", "PostgreSQL DSN")
 
-	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "PostgreSQL max open connections")
-	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "PostgreSQL max idle connections")
+	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 50, "PostgreSQL max open connections")
+	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 50, "PostgreSQL max idle connections")
 	flag.DurationVar(&cfg.db.maxIdleTime, "db-max-idle-time", 15*time.Minute, "PostgreSQL max connection idle time")
 
-	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", true, "Enable rate limiter")
-	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum requests per second")
-	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
-
-	flag.StringVar(&cfg.smtp.host, "smtp-host", "", "SMTP host")
-	flag.IntVar(&cfg.smtp.port, "smtp-port", 25, "SMTP port")
-	flag.StringVar(&cfg.smtp.username, "smtp-username", "", "SMTP username")
-	flag.StringVar(&cfg.smtp.password, "smtp-password", "", "SMTP password")
-	flag.StringVar(&cfg.smtp.sender, "smtp-sender", "Reserva <no-reply@reserva.cash>", "SMTP sender")
-
-	flag.Func("cors-trusted-origins", "Trusted CORS origins (space separated)", func(val string) error {
-		cfg.cors.trustedOrigins = strings.Fields(val)
-		return nil
-	})
-
-	displayVersion := flag.Bool("version", false, "Display version and exit")
+	flag.IntVar(&cfg.iters, "iters", 20000, "Number of iterations")
+	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 10, "Concurrency limit")
 
 	flag.Parse()
-
-	if *displayVersion {
-		fmt.Printf("Version:\t%s\n", version)
-		os.Exit(0)
-	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
@@ -105,8 +63,6 @@ func main() {
 	defer db.Close()
 
 	logger.Info("database connection pool established")
-
-	expvar.NewString("version").Set(version)
 
 	expvar.Publish("goroutines", expvar.Func(func() any {
 		return runtime.NumGoroutine()
@@ -121,17 +77,77 @@ func main() {
 	}))
 
 	app := &application{
-		config: cfg,
-		logger: logger,
 		models: data.NewModels(db),
-		mailer: mailer.New(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
 	}
 
-	err = app.serve()
+	users, err := app.models.Users.GetAll()
 	if err != nil {
 		logger.Error(err.Error())
 		os.Exit(1)
 	}
+
+	numUsers := len(users)
+
+	start := time.Now()
+
+	eg := errgroup.Group{}
+
+	// set limit
+	eg.SetLimit(cfg.concurrencyLimit)
+
+	// loop 1000 times
+	for i := 0; i < cfg.iters; i++ {
+
+		eg.Go(func() error {
+
+			// get two random users
+			acquiringUser := users[rand.Intn(numUsers)]
+			issuingUser := users[rand.Intn(numUsers)]
+
+			// ensure the users are different
+			if acquiringUser.ID == issuingUser.ID {
+				return nil
+			}
+
+			// create a transfer request
+			transferRequest := &data.TransferRequest{
+				CardId:             acquiringUser.CardID,
+				IssuingAccountID:   issuingUser.AccountID,
+				AcquiringAccountID: acquiringUser.AccountID,
+				Amount:             rand.Int63n(1000),
+				CreatedAt:          time.Now(),
+			}
+
+			// insert the transfer request
+			transferRequest, err := app.models.TransferRequests.Insert(transferRequest)
+			if err != nil {
+				return err
+			}
+
+			transfer := data.Transfer{
+				TransferRequestID: transferRequest.ID,
+				FromAccountID:     transferRequest.IssuingAccountID,
+				ToAccountID:       transferRequest.AcquiringAccountID,
+				Amount:            transferRequest.Amount,
+				CreatedAt:         time.Now(),
+			}
+
+			err = app.models.Transfers.Insert(&transfer)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		})
+	}
+
+	err = eg.Wait()
+	if err != nil {
+		logger.Error(err.Error())
+		os.Exit(1)
+	}
+
+	logger.Info(fmt.Sprintf("%v transfer requests created in %v, rate of %.0f per second", cfg.iters, time.Since(start), float64(cfg.iters)/time.Since(start).Seconds()))
 }
 
 func openDB(cfg config) (*sql.DB, error) {

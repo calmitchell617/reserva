@@ -21,7 +21,7 @@ confirm:
 ## run/api: run the cmd/api application
 .PHONY: run/api
 run/api:
-	go run ./cmd/api -db-dsn=${DSN} -smtp-username=${SMTP_USERNAME} -smtp-password=${SMTP_PASSWORD} -smtp-host=${SMTP_HOST} -smtp-port=${SMTP_PORT}
+	go run ./cmd/api -db-dsn=${DSN}
 
 ## db/psql: connect to the database using psql
 .PHONY: db/psql
@@ -36,7 +36,7 @@ db/migrations/new:
 
 ## db/migrations/up: apply all up database migrations
 .PHONY: db/migrations/up
-db/migrations/up: confirm
+db/migrations/up:
 	@echo 'Running up migrations...'
 	migrate -path ./migrations -database ${DSN} up
 

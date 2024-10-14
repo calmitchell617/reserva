@@ -1,22 +1,20 @@
-DROP EXTENSION IF EXISTS citext;
-
-DROP TABLE IF EXISTS users;
-
-DROP TABLE IF EXISTS accounts;
-
-DROP TABLE IF EXISTS account_holders;
-
-DROP TABLE IF EXISTS account_account_holder;
-
-DROP TABLE IF EXISTS cards;
+DROP TABLE IF EXISTS tokens;
 
 DROP TABLE IF EXISTS transfers;
 
 DROP TABLE IF EXISTS transfer_requests;
 
-DROP TABLE IF EXISTS holds;
+DROP TABLE IF EXISTS users;
 
-DROP TABLE IF EXISTS hold_requests;
+DROP TABLE IF EXISTS cards;
 
-DROP TABLE IF EXISTS tokens;
+DROP TABLE IF EXISTS accounts;
+
+DROP TABLE IF EXISTS user_permission;
+
+DROP TABLE IF EXISTS permissions;
+
+DROP TABLE IF EXISTS organizations;
+
+DROP EXTENSION IF EXISTS citext;
 
