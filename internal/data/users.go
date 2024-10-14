@@ -12,7 +12,7 @@ var AnonymousUser = &User{}
 
 type User struct {
 	ID             int64  `json:"id"`
-	OrganizationId int64  `json:"organization_id"`
+	OrganizationID int64  `json:"organization_id"`
 	Frozen         bool   `json:"frozen"`
 	AccountID      int64  `json:"account_id"`
 	CardID         int64  `json:"card_id"`
@@ -62,7 +62,7 @@ ORDER BY
 		var user User
 		err := rows.Scan(
 			&user.ID,
-			&user.OrganizationId,
+			&user.OrganizationID,
 			&user.Frozen,
 			&user.AccountID,
 			&user.CardID,
@@ -98,7 +98,7 @@ func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error)
 
 	err := m.DB.QueryRowContext(ctx, query, args...).Scan(
 		&user.ID,
-		&user.OrganizationId,
+		&user.OrganizationID,
 		&user.Frozen,
 	)
 	if err != nil {

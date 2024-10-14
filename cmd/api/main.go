@@ -109,17 +109,23 @@ func main() {
 				return nil
 			}
 
+			// get the issuing account id
+			issuingAccountId, err := app.models.Cards.GetAccountIDFromCard(issuingUser.CardID)
+			if err != nil {
+				return err
+			}
+
 			// create a transfer request
 			transferRequest := &data.TransferRequest{
 				CardId:             acquiringUser.CardID,
-				IssuingAccountID:   issuingUser.AccountID,
 				AcquiringAccountID: acquiringUser.AccountID,
+				IssuingAccountID:   issuingAccountId,
 				Amount:             rand.Int63n(1000),
 				CreatedAt:          time.Now(),
 			}
 
 			// insert the transfer request
-			transferRequest, err := app.models.TransferRequests.Insert(transferRequest)
+			transferRequest, err = app.models.TransferRequests.Insert(transferRequest)
 			if err != nil {
 				return err
 			}

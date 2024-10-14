@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 )
 
@@ -49,4 +50,26 @@ func (m CardModel) GetAll() ([]*Card, error) {
 	}
 
 	return cards, nil
+}
+
+func (m CardModel) GetAccountIDFromCard(cardId int64) (int64, error) {
+	query := `SELECT account_id from cards where id = $1`
+
+	var accountId int64
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := m.DB.QueryRowContext(ctx, query, cardId).Scan(&accountId)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return 0, ErrRecordNotFound
+		default:
+			return 0, err
+		}
+	}
+
+	return accountId, nil
 }
