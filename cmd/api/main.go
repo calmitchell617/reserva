@@ -49,8 +49,8 @@ func main() {
 	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 50, "PostgreSQL max idle connections")
 	flag.DurationVar(&cfg.db.maxIdleTime, "db-max-idle-time", 15*time.Minute, "PostgreSQL max connection idle time")
 
-	flag.IntVar(&cfg.iters, "iters", 10000, "Number of iterations")
-	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 10, "Concurrency limit")
+	flag.IntVar(&cfg.iters, "iters", 100000, "Number of iterations")
+	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 50, "Concurrency limit")
 
 	flag.Parse()
 
@@ -98,6 +98,8 @@ func main() {
 
 	// initialize atomic counter
 	var counter int32
+
+	fmt.Println("Starting test")
 
 	for int(atomic.LoadInt32(&counter)) < cfg.iters {
 
@@ -147,7 +149,7 @@ func main() {
 				CreatedAt:         time.Now(),
 			}
 
-			err = app.models.Transfers.Insert(&transfer)
+			_, err = app.models.Transfers.Insert(&transfer)
 			if err != nil {
 				return err
 			}

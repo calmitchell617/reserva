@@ -1,6 +1,6 @@
 INSERT INTO accounts(organization_id, balance, frozen)
 SELECT
-    random(1, 1000),
+    floor(1 + random() * 1000)::int,
     1000000000,
     FALSE
 FROM

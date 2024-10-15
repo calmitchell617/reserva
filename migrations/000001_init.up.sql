@@ -57,6 +57,26 @@ CREATE TABLE IF NOT EXISTS transfers(
     created_at timestamp NOT NULL
 );
 
+-- FKs turned off
+
+-- CREATE TABLE IF NOT EXISTS transfer_requests(
+--     id bigserial PRIMARY KEY,
+--     card_id bigint,
+--     issuing_account_id bigint NOT NULL,
+--     acquiring_account_id bigint NOT NULL,
+--     amount bigint NOT NULL,
+--     created_at timestamp NOT NULL
+-- );
+
+-- CREATE TABLE IF NOT EXISTS transfers(
+--     id bigserial PRIMARY KEY,
+--     transfer_request_id bigint,
+--     from_account_id bigint NOT NULL,
+--     to_account_id bigint NOT NULL,
+--     amount bigint NOT NULL,
+--     created_at timestamp NOT NULL
+-- );
+
 CREATE TABLE IF NOT EXISTS tokens(
     hash uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id int NOT NULL REFERENCES users ON DELETE CASCADE,

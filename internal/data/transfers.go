@@ -19,7 +19,7 @@ type TransferModel struct {
 	DB *sql.DB
 }
 
-func (m TransferModel) Insert(transfer *Transfer) error {
+func (m TransferModel) Insert(transfer *Transfer) (*Transfer, error) {
 	query := `
         INSERT INTO transfers (transfer_request_id, from_account_id, to_account_id, amount, created_at)
         VALUES ($1, $2, $3, $4, $5)
@@ -30,5 +30,7 @@ func (m TransferModel) Insert(transfer *Transfer) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	return m.DB.QueryRowContext(ctx, query, args...).Scan(&transfer.ID)
+	m.DB.QueryRowContext(ctx, query, args...).Scan(&transfer.ID)
+
+	return transfer, nil
 }

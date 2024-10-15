@@ -80,9 +80,9 @@ ORDER BY
 func (m UserModel) GetForToken(tokenHash []byte) (*User, error) {
 	query := `
         SELECT users.id, users.organization_id, users.frozen
-        FROM users
-        INNER JOIN tokens
-        ON users.id = tokens.user_id
+        FROM tokens
+        INNER JOIN users
+        ON tokens.user_id = users.id
         WHERE tokens.hash = $1
         AND tokens.expires_at > $2`
 
