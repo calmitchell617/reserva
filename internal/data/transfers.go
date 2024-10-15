@@ -3,34 +3,55 @@ package data
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 )
 
 type Transfer struct {
-	ID                int64     `json:"id"`
-	TransferRequestID int64     `json:"transfer_request_id"`
-	FromAccountID     int64     `json:"from_account_id"`
-	ToAccountID       int64     `json:"to_account_id"`
-	Amount            int64     `json:"amount"`
-	CreatedAt         time.Time `json:"created_at"`
+	ID             int64     `json:"id"`
+	CardID         int64     `json:"card_id"`
+	FromAccountID  int64     `json:"from_account_id"`
+	ToAccountID    int64     `json:"to_account_id"`
+	RequestingUser User      `json:"requesting_user"`
+	Amount         int64     `json:"amount"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type TransferModel struct {
 	DB *sql.DB
 }
 
-func (m TransferModel) Insert(transfer *Transfer) (*Transfer, error) {
-	query := `
-        INSERT INTO transfers (transfer_request_id, from_account_id, to_account_id, amount, created_at)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id`
+func (m *TransferModel) TransferFunds(transfer *Transfer, engine string) error {
+	switch engine {
+	case "postgresql":
+		return m.TransferFundsPostgreSQL(transfer)
+	}
+	return fmt.Errorf("unsupported database engine")
+}
 
-	args := []any{transfer.TransferRequestID, transfer.FromAccountID, transfer.ToAccountID, transfer.Amount, transfer.CreatedAt}
+func (m *TransferModel) TransferFundsPostgreSQL(transfer *Transfer) error {
+	query := `
+        SELECT transfer_funds($1, $2, $3, $4, $5, $6)
+    `
+
+	args := []interface{}{
+		transfer.CardID,
+		transfer.FromAccountID,
+		transfer.ToAccountID,
+		transfer.RequestingUser.ID,
+		transfer.Amount,
+		transfer.CreatedAt,
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	m.DB.QueryRowContext(ctx, query, args...).Scan(&transfer.ID)
+	var transferID int64
+	err := m.DB.QueryRowContext(ctx, query, args...).Scan(&transferID)
+	if err != nil {
+		fmt.Printf("Error transferring funds -> %v\n", err)
+		return err
+	}
 
-	return transfer, nil
+	return nil
 }

@@ -52,3 +52,64 @@ func (m AccountModel) Get(id int64, organizationId int64) (*Account, error) {
 
 	return &account, nil
 }
+func (m AccountModel) GetFromCard(card *Card, engine string) (*Account, *Card, error) {
+	switch engine {
+	case "postgresql":
+		return m.GetFromCardPostgreSQL(card)
+	}
+	return nil, nil, errors.New("unsupported database engine")
+}
+
+func (m AccountModel) GetFromCardPostgreSQL(card *Card) (*Account, *Card, error) {
+	query := `
+	SELECT accounts.id, accounts.organization_id, accounts.balance, accounts.frozen, cards.account_id, cards.expiration_date, cards.security_code, cards.frozen
+	FROM accounts
+	JOIN cards ON accounts.id = cards.account_id
+	WHERE cards.id = $1
+	`
+
+	var account Account
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := m.DB.QueryRowContext(ctx, query, card.ID).Scan(
+		&account.ID,
+		&account.OrganizationID,
+		&account.Balance,
+		&account.Frozen,
+		&card.AccountID,
+		&card.ExpirationDate,
+		&card.SecurityCode,
+		&card.Frozen,
+	)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, nil, ErrRecordNotFound
+		default:
+			return nil, nil, err
+		}
+	}
+
+	return &account, card, nil
+}
+
+func (m AccountModel) UpdateBalance(tx *sql.Tx, accountID int64, amount int64) error {
+	query := `
+	UPDATE accounts
+	SET balance = balance + $1
+	WHERE id = $2
+	`
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	_, err := tx.ExecContext(ctx, query, amount, accountID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

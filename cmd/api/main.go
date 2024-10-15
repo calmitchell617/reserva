@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"expvar"
 	"flag"
 	"fmt"
@@ -28,8 +29,9 @@ type config struct {
 		maxOpenConns int
 		maxIdleConns int
 		maxIdleTime  time.Duration
+		engine       string
 	}
-	iters            int
+	duration         time.Duration
 	concurrencyLimit int
 }
 
@@ -49,16 +51,23 @@ func main() {
 	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 50, "PostgreSQL max idle connections")
 	flag.DurationVar(&cfg.db.maxIdleTime, "db-max-idle-time", 15*time.Minute, "PostgreSQL max connection idle time")
 
-	flag.IntVar(&cfg.iters, "iters", 100000, "Number of iterations")
+	flag.StringVar(&cfg.db.engine, "engine", "", "Database engine")
+
+	flag.DurationVar(&cfg.duration, "duration", 30*time.Second, "Test duration")
 	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 50, "Concurrency limit")
 
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
+	if cfg.db.engine == "" {
+		logger.Error("engine is required")
+		os.Exit(1)
+	}
+
 	db, err := openDB(cfg)
 	if err != nil {
-		logger.Error(err.Error())
+		logger.Error(fmt.Errorf("error opening database connection: %w", err).Error())
 		os.Exit(1)
 	}
 	defer db.Close()
@@ -81,9 +90,9 @@ func main() {
 		models: data.NewModels(db),
 	}
 
-	users, err := app.models.Users.GetAll()
+	users, err := app.models.Users.GetAll(cfg.db.engine)
 	if err != nil {
-		logger.Error(err.Error())
+		logger.Error(fmt.Errorf("error getting users: %w", err).Error())
 		os.Exit(1)
 	}
 
@@ -99,58 +108,130 @@ func main() {
 	// initialize atomic counter
 	var counter int32
 
-	fmt.Println("Starting test")
+	fmt.Printf("Starting test\n\n")
 
-	for int(atomic.LoadInt32(&counter)) < cfg.iters {
+	for time.Since(start) < cfg.duration {
 
 		eg.Go(func() error {
 
+			// get a random amount
+			amount := rand.Int63n(1000)
+
 			// get two random users
-			acquiringUser := users[rand.Intn(numUsers)]
-			issuingUser := users[rand.Intn(numUsers)]
+			acquiringUserChoice := users[rand.Intn(numUsers)]
+			acquiringAccountID := acquiringUserChoice.AccountID
+			issuingUserChoice := users[rand.Intn(numUsers)]
 
 			// ensure the users are different
-			if acquiringUser.ID == issuingUser.ID {
+			if acquiringUserChoice.ID == issuingUserChoice.ID {
 				return nil
 			}
 
-			// get acquiring user from token
-			_, err := app.models.Users.GetForToken(acquiringUser.TokenHash)
+			// get acquiring user and check permission with token
+			users, err := app.models.Users.GetForToken(acquiringUserChoice.Token.Hash, cfg.db.engine)
 			if err != nil {
+				fmt.Printf("error getting user -> %v\n", err)
 				return err
 			}
 
-			// get the issuing account id
-			issuingAccountId, err := app.models.Cards.GetAccountIDFromCard(issuingUser.CardID)
+			// make sure the acquiring user has permission to request payments
+			var acquiringUser *data.User
+
+			for _, user := range users {
+				if user.Token.PermissionID == 1 {
+					acquiringUser = user
+					break
+				}
+			}
+
+			if acquiringUser == nil {
+				fmt.Printf("acquiring user not found or does not have permission\n")
+				return errors.New("acquiring user not found or does not have permission")
+			}
+
+			acquiringUser.AccountID = acquiringAccountID
+
+			// get the issuing account info from the card.. this is the info that would come from a POS terminal or payment gateway
+			issuingAccount, card, err := app.models.Accounts.GetFromCard(&issuingUserChoice.Card, cfg.db.engine)
 			if err != nil {
+				fmt.Printf("error getting account from card -> %v\n", err)
 				return err
 			}
 
-			// create a transfer request
-			transferRequest := &data.TransferRequest{
-				CardId:             acquiringUser.CardID,
-				AcquiringAccountID: acquiringUser.AccountID,
-				IssuingAccountID:   issuingAccountId,
-				Amount:             rand.Int63n(1000),
-				CreatedAt:          time.Now(),
+			// check account balance
+			if issuingAccount.Balance < amount {
+				fmt.Printf("issuing account has insufficient funds\n")
+				return errors.New("issuing account has insufficient funds")
 			}
 
-			// insert the transfer request
-			transferRequest, err = app.models.TransferRequests.Insert(transferRequest)
+			// check account frozen status
+			if issuingAccount.Frozen {
+				fmt.Printf("issuing account is frozen\n")
+				return errors.New("issuing account is frozen")
+			}
+
+			// check card frozen status
+			if card.Frozen {
+				fmt.Printf("issuing card is frozen\n")
+				return errors.New("issuing card is frozen")
+			}
+
+			// check card expiration date
+			if card.ExpirationDate.Before(time.Now()) {
+				fmt.Printf("issuing card is expired\n")
+				return errors.New("issuing card is expired")
+			}
+
+			// check card security code
+			if card.SecurityCode != issuingUserChoice.Card.SecurityCode {
+				fmt.Printf("issuing card security code does not match\n")
+				return errors.New("issuing card security code does not match")
+			}
+
+			// at this point, the issuing org will have to approve the transfer request.
+			// They would be sent data about the account to a known endpoint, and would respond with a token if they approve the transfer.
+
+			// get issuing user and check permission with token
+			users, err = app.models.Users.GetForToken(issuingUserChoice.Token.Hash, cfg.db.engine)
 			if err != nil {
+				fmt.Printf("error getting user -> %v\n", err)
 				return err
 			}
 
+			var issuingUser *data.User
+
+			// make sure they have permission to approve transfer requests
+			for _, user := range users {
+				if user.Token.PermissionID == 1 {
+					issuingUser = user
+					break
+				}
+			}
+
+			if issuingUser == nil {
+				fmt.Printf("issuing user not found or does not have permission\n")
+				return errors.New("issuing user not found or does not have permission")
+			}
+
+			// check if the issuing user is in the same organization as the issuing account
+			if issuingUser.OrganizationID != issuingAccount.OrganizationID {
+				fmt.Printf("issuing user does not have permission\n")
+				return errors.New("issuing user does not have permission")
+			}
+
+			// create a transfer
 			transfer := data.Transfer{
-				TransferRequestID: transferRequest.ID,
-				FromAccountID:     transferRequest.IssuingAccountID,
-				ToAccountID:       transferRequest.AcquiringAccountID,
-				Amount:            transferRequest.Amount,
-				CreatedAt:         time.Now(),
+				CardID:         card.ID,
+				FromAccountID:  issuingAccount.ID,
+				ToAccountID:    acquiringUser.AccountID,
+				RequestingUser: *acquiringUser,
+				Amount:         amount,
+				CreatedAt:      time.Now(),
 			}
 
-			_, err = app.models.Transfers.Insert(&transfer)
+			err = app.models.Transfers.TransferFunds(&transfer, cfg.db.engine)
 			if err != nil {
+				fmt.Printf("error transferring funds -> %v\n", err)
 				return err
 			}
 
@@ -166,7 +247,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger.Info(fmt.Sprintf("%v transfer requests created in %v, rate of %.0f per second", cfg.iters, time.Since(start), float64(cfg.iters)/time.Since(start).Seconds()))
+	logger.Info(fmt.Sprintf("%v transfer requests created in %v, rate of %.0f per second", counter, cfg.duration, float64(counter)/time.Since(start).Seconds()))
 }
 
 func openDB(cfg config) (*sql.DB, error) {

@@ -3,19 +3,19 @@ package data
 import (
 	"context"
 	"database/sql"
-	"errors"
+	"fmt"
 	"time"
 )
 
 var AnonymousUser = &User{}
 
 type User struct {
-	ID             int64  `json:"id"`
-	OrganizationID int64  `json:"organization_id"`
-	Frozen         bool   `json:"frozen"`
-	AccountID      int64  `json:"account_id"`
-	CardID         int64  `json:"card_id"`
-	TokenHash      []byte `json:"token_hash"`
+	ID             int64 `json:"id"`
+	OrganizationID int64 `json:"organization_id"`
+	Frozen         bool  `json:"frozen"`
+	AccountID      int64 `json:"account_id"`
+	Card           Card  `json:"card"`
+	Token          Token `json:"token"`
 }
 
 func (u *User) IsAnonymous() bool {
@@ -26,7 +26,15 @@ type UserModel struct {
 	DB *sql.DB
 }
 
-func (m UserModel) GetAll() ([]*User, error) {
+func (m UserModel) GetAll(engine string) ([]*User, error) {
+	switch engine {
+	case "postgresql":
+		return m.GetAllUsersPostgreSQL()
+	}
+	return nil, fmt.Errorf("unsupported database engine")
+}
+
+func (m UserModel) GetAllUsersPostgreSQL() ([]*User, error) {
 	query := `
 SELECT
 	USERS.ID,
@@ -34,7 +42,10 @@ SELECT
 	USERS.FROZEN,
 	ACCOUNTS.ID AS ACCOUNT_ID,
 	CARDS.ID AS CARD_ID,
-	HASH
+	CARDS.Expiration_Date as Expiration_Date,
+	CARDS.SECURITY_CODE as security_code,
+	CARDS.FROZEN as card_frozen,
+	tokens.HASH 
 FROM
 	USERS
 	JOIN ORGANIZATIONS ON USERS.ORGANIZATION_ID = ORGANIZATIONS.ID
@@ -46,66 +57,103 @@ ORDER BY
 	ORGANIZATION_ID,
 	ACCOUNT_ID`
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	rows, err := m.DB.QueryContext(ctx, query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error running query: %v", err)
 	}
 	defer rows.Close()
 
 	users := []*User{}
 
 	for rows.Next() {
+
 		var user User
+		var card Card
+		var token Token
+
 		err := rows.Scan(
 			&user.ID,
 			&user.OrganizationID,
 			&user.Frozen,
 			&user.AccountID,
-			&user.CardID,
-			&user.TokenHash,
+			&card.ID,
+			&card.ExpirationDate,
+			&card.SecurityCode,
+			&card.Frozen,
+			&token.Hash,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error scanning row: %v", err)
 		}
 
+		user.Card = card
+		user.Token = token
+
 		users = append(users, &user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %v", err)
 	}
 
 	return users, nil
 }
 
-func (m UserModel) GetForToken(tokenHash []byte) (*User, error) {
+func (m UserModel) GetForToken(tokenHash []byte, engine string) ([]*User, error) {
+	switch engine {
+	case "postgresql":
+		return m.GetForTokenPostgreSQL(tokenHash)
+	}
+	return nil, fmt.Errorf("unsupported database engine")
+}
+
+func (m UserModel) GetForTokenPostgreSQL(tokenHash []byte) ([]*User, error) {
 	query := `
-        SELECT users.id, users.organization_id, users.frozen
-        FROM tokens
-        INNER JOIN users
-        ON tokens.user_id = users.id
-        WHERE tokens.hash = $1
-        AND tokens.expires_at > $2`
+        SELECT users.id, users.organization_id, users.frozen, tokens.hash, tokens.permission_id, tokens.expires_at
+        FROM users
+        INNER JOIN tokens
+        ON users.id = tokens.user_id
+        WHERE tokens.hash = $1`
 
-	args := []any{tokenHash[:], time.Now()}
-
-	var user User
+	var users []*User
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	err := m.DB.QueryRowContext(ctx, query, args...).Scan(
-		&user.ID,
-		&user.OrganizationID,
-		&user.Frozen,
-	)
+	rows, err := m.DB.QueryContext(ctx, query, tokenHash)
 	if err != nil {
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			return nil, ErrRecordNotFound
-		default:
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+
+		var user User
+		var token Token
+
+		err := rows.Scan(
+			&user.ID,
+			&user.OrganizationID,
+			&user.Frozen,
+			&token.Hash,
+			&token.PermissionID,
+			&token.ExpiresAt,
+		)
+		if err != nil {
 			return nil, err
 		}
+
+		user.Token = token
+
+		users = append(users, &user)
 	}
 
-	return &user, nil
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return users, nil
 }

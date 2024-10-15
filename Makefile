@@ -18,15 +18,20 @@ confirm:
 # DEVELOPMENT
 # ==================================================================================== #
 
-## run/api: run the cmd/api application
+## run/api engine=$1: run the cmd/api application
 .PHONY: run/api
 run/api:
-	go run ./cmd/api -db-dsn=${DSN}
+	go run ./cmd/api -db-dsn=${DSN} -engine=${engine}
 
-## db/psql: connect to the database using psql
+## db/psql: connect to postgresql
 .PHONY: db/psql
 db/psql:
 	psql ${DSN}
+
+## db/migrate/postgresql: connect to the database using psql
+.PHONY: db/migrate/postgresql
+db/migrate/postgresql:
+	psql ${SETUP_DSN} -f migrations/postgresql_init.sql
 
 ## db/migrations/new name=$1: create a new database migration
 .PHONY: db/migrations/new
