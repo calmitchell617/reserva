@@ -14,7 +14,7 @@ create database reserva;
 \c reserva;
 
 -- increase memory available for this session
-SET work_mem = '8GB';
+SET work_mem = '6GB';
 
 vacuum full;
 
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS accounts(
 );
 
 CREATE TABLE IF NOT EXISTS cards(
-    id int PRIMARY KEY,
+    id bigserial PRIMARY KEY,
     account_id int NOT NULL REFERENCES accounts ON DELETE CASCADE,
     expiration_date date NOT NULL,
     security_code smallint NOT NULL,
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS cards(
 
 CREATE TABLE IF NOT EXISTS transfers(
     id bigserial PRIMARY KEY,
-    card_id int REFERENCES cards ON DELETE CASCADE,
+    card_id bigint REFERENCES cards ON DELETE CASCADE,
     from_account_id int NOT NULL REFERENCES accounts ON DELETE CASCADE,
     to_account_id int NOT NULL REFERENCES accounts ON DELETE CASCADE,
     requesting_user_id int NOT NULL REFERENCES users ON DELETE CASCADE,
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS tokens(
 
 CREATE
 OR REPLACE FUNCTION transfer_funds(
-    p_card_id INT,
+    p_card_id BIGINT,
     p_from_account_id INT,
     p_to_account_id INT,
     p_requesting_user_id SMALLINT,
@@ -119,8 +119,9 @@ INSERT INTO organizations(id)
 SELECT
     generate_series(1, 10);
 
-INSERT INTO accounts(organization_id, balance, frozen)
+INSERT INTO accounts(id, organization_id, balance, frozen)
 SELECT
+    series_column,
     floor(1 + random() * 10)::int,
     1000000000, -- everyone in my country is a billionaire. inflation be damned
     FALSE

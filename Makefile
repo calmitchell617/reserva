@@ -1,81 +1,50 @@
 include .envrc
 
-# ==================================================================================== #
-# HELPERS
-# ==================================================================================== #
+# ----------------------------------------------
+# building and running
+# ----------------------------------------------
 
-## help: print this help message
-.PHONY: help
-help:
-	@echo 'Usage:'
-	@sed -n 's/^##//p' ${MAKEFILE_LIST} | column -t -s ':' |  sed -e 's/^/ /'
+## build/reserva: build the cmd/reserva application
+.PHONY: build/reserva
+build/reserva:
+	go build -ldflags="-s -w" -o=./bin/reserva ./cmd/reserva
 
-.PHONY: confirm
-confirm:
-	@echo -n 'Are you sure? [y/N] ' && read ans && [ $${ans:-N} = y ]
+## benchmark/postgresql: benchmark a postgresql db
+.PHONY: benchmark/postgresql
+benchmark/postgresql: build/reserva
+	go run ./cmd/reserva -db-dsn=${POSTGRESQL_BENCHMARK_DSN} -engine=postgresql
 
-# ==================================================================================== #
-# DEVELOPMENT
-# ==================================================================================== #
+## benchmark/mariadb: benchmark a mariadb db
+.PHONY: benchmark/mariadb
+benchmark/mariadb: build/reserva
+	go run ./cmd/reserva -db-dsn=${MARIADB_BENCHMARK_DSN} -engine=mariadb
 
-## run/api engine=$1: run the cmd/api application
-.PHONY: run/api
-run/api:
-	go run ./cmd/api -db-dsn=${DSN} -engine=${engine}
+# ----------------------------------------------
+# postgresql
+# ----------------------------------------------
 
-## db/psql: connect to postgresql
-.PHONY: db/psql
-db/psql:
-	psql ${DSN}
+## deploy/postgresql: create a postgresql docker container
+.PHONY: deploy/postgresql
+deploy/postgresql:
+	docker rm -f postgresql || true
+	docker run --name postgresql -e POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD} --platform linux/arm64 -p 5432:5432 -d postgres:17.0-bookworm
 
-## db/migrate/postgresql: connect to the database using psql
-.PHONY: db/migrate/postgresql
-db/migrate/postgresql:
-	psql ${SETUP_DSN} -f migrations/postgresql_init.sql
+## prepare/postgresql: prepare a postgresql db for benchmarking
+.PHONY: prepare/postgresql
+prepare/postgresql:
+	psql ${POSTGRESQL_SETUP_DSN} -f migrations/postgresql_init.sql
 
-## db/migrations/new name=$1: create a new database migration
-.PHONY: db/migrations/new
-db/migrations/new:
-	@echo 'Creating migration files for ${name}...'
-	migrate create -seq -ext=.sql -dir=./migrations ${name}
+# ----------------------------------------------
+# mariadb
+# ----------------------------------------------
 
-## db/migrations/up: apply all up database migrations
-.PHONY: db/migrations/up
-db/migrations/up:
-	@echo 'Running up migrations...'
-	migrate -path ./migrations -database ${DSN} up
+## deploy/mariadb: create a mariadb docker container
+.PHONY: deploy/mariadb
+deploy/mariadb:
+	docker rm -f mariadb || true
+	docker run --name mariadb -e MYSQL_ROOT_PASSWORD=${MARIADB_PASSWORD} --platform linux/arm64 -p 3306:3306 -d mariadb:11.5.2-noble
 
-# ==================================================================================== #
-# QUALITY CONTROL
-# ==================================================================================== #
-
-## audit: tidy and vendor dependencies and format, vet and test all code
-.PHONY: audit
-audit: vendor
-	@echo 'Formatting code...'
-	go fmt ./...
-	@echo 'Vetting code...'
-	go vet ./...
-	staticcheck ./...
-	@echo 'Running tests...'
-	go test -race -vet=off ./...
-
-## vendor: tidy and vendor dependencies
-.PHONY: vendor
-vendor:
-	@echo 'Tidying and verifying module dependencies...'
-	go mod tidy
-	go mod verify
-	@echo 'Vendoring dependencies...'
-	go mod vendor
-
-# ==================================================================================== #
-# BUILD
-# ==================================================================================== #
-
-## build/api: build the cmd/api application
-.PHONY: build/api
-build/api:
-	@echo 'Building cmd/api...'
-	go build -ldflags="-s -w" -o=./bin/api ./cmd/api
-	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o=./bin/linux_amd64/api ./cmd/api
+## prepare/mariadb: prepare a mariadb db for benchmarking
+.PHONY: prepare/mariadb
+prepare/mariadb:
+	mariadb -h 127.0.0.1 -P 3306 -u root -p${MARIADB_PASSWORD} mysql < migrations/mariadb_init.sql
