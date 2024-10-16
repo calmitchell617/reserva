@@ -25,8 +25,42 @@ func (m *TransferModel) TransferFunds(transfer *Transfer, engine string) error {
 	switch engine {
 	case "postgresql":
 		return m.TransferFundsPostgreSQL(transfer)
+	case "mariadb":
+		return m.TransferFundsMariaDB(transfer)
 	}
 	return fmt.Errorf("unsupported database engine")
+}
+
+func (m *TransferModel) TransferFundsMariaDB(transfer *Transfer) error {
+	query := `CALL transfer_funds(?, ?, ?, ?, ?, ?);`
+
+	var vTransferID int
+
+	args := []interface{}{
+		transfer.CardID,
+		transfer.FromAccountID,
+		transfer.ToAccountID,
+		transfer.RequestingUser.ID,
+		transfer.Amount,
+		transfer.CreatedAt,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// Execute the stored procedure
+	err := m.DB.QueryRowContext(ctx, query, args...).Scan(&vTransferID)
+	if err != nil {
+		fmt.Printf("error transferring funds -> %v\n", err)
+		return err
+	}
+
+	// Check the transfer ID result
+	if vTransferID == -1 {
+		return fmt.Errorf("transfer failed")
+	}
+
+	return nil
 }
 
 func (m *TransferModel) TransferFundsPostgreSQL(transfer *Transfer) error {

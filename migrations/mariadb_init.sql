@@ -75,15 +75,14 @@ CREATE PROCEDURE transfer_funds(
     IN p_to_account_id INT,
     IN p_requesting_user_id SMALLINT,
     IN p_amount BIGINT,
-    IN p_created_at TIMESTAMP,
-    OUT v_transfer_id INT
+    IN p_created_at TIMESTAMP
 )
 BEGIN
     DECLARE exit handler FOR SQLEXCEPTION
     BEGIN
         -- Rollback in case of an error
         ROLLBACK;
-        SET v_transfer_id = -1;
+        -- SET v_transfer_id = -1;
     END;
 
     -- Start transaction
@@ -118,7 +117,7 @@ BEGIN
     );
 
     -- Retrieve the last inserted transfer ID
-    SET v_transfer_id = LAST_INSERT_ID();
+    select LAST_INSERT_ID();
 
     -- Commit the transaction
     COMMIT;
@@ -141,7 +140,7 @@ CREATE PROCEDURE InsertAccounts()
 BEGIN
     DECLARE counter INT DEFAULT 1;
 
-    WHILE counter <= 1000000 DO
+    WHILE counter <= 100000 DO
         INSERT INTO accounts (id, organization_id, balance, frozen) VALUES (counter, FLOOR(1 + RAND() * 10), 1000000000, FALSE);
         SET counter = counter + 1;
     END WHILE;
@@ -169,7 +168,7 @@ CREATE PROCEDURE InsertCards()
 BEGIN
     DECLARE counter BIGINT DEFAULT 1;
 
-    WHILE counter <= 1000000 DO
+    WHILE counter <= 100000 DO
         INSERT INTO cards (id, account_id, expiration_date, security_code, frozen) VALUES (counter, counter, DATE_ADD(NOW(), INTERVAL 1 YEAR), FLOOR(100 + RAND() * 900), FALSE);
         SET counter = counter + 1;
     END WHILE;
@@ -177,15 +176,5 @@ END//
 
 CALL InsertCards()//
 
-CREATE PROCEDURE InsertTokens()
-BEGIN
-    DECLARE counter INT DEFAULT 1;
-
-    WHILE counter <= 1000000 DO
-        INSERT INTO tokens (user_id, permission_id, expires_at) SELECT id, 1, DATE_ADD(NOW(), INTERVAL 1 YEAR) FROM users;
-        INSERT INTO tokens (user_id, permission_id, expires_at) SELECT id, 2, DATE_ADD(NOW(), INTERVAL 1 YEAR) FROM users;
-        SET counter = counter + 1;
-    END WHILE;
-END//
-
-CALL InsertTokens()//
+INSERT INTO tokens (user_id, permission_id, expires_at) SELECT id, 1, DATE_ADD(NOW(), INTERVAL 1 YEAR) FROM users//
+INSERT INTO tokens (hash, user_id, permission_id, expires_at) SELECT hash, user_id, 2, expires_at FROM tokens//

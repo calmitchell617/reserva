@@ -18,6 +18,7 @@ import (
 
 	"github.com/calmitchell617/reserva/internal/data"
 
+	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 )
 
@@ -251,7 +252,19 @@ func main() {
 }
 
 func openDB(cfg config) (*sql.DB, error) {
-	db, err := sql.Open("postgres", cfg.db.dsn)
+
+	var driver string
+
+	switch cfg.db.engine {
+	case "postgresql":
+		driver = "postgres"
+	case "mariadb":
+		driver = "mysql"
+	default:
+		return nil, fmt.Errorf("unsupported database engine")
+	}
+
+	db, err := sql.Open(driver, cfg.db.dsn)
 	if err != nil {
 		return nil, err
 	}
