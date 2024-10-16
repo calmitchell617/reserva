@@ -54,8 +54,8 @@ func main() {
 
 	flag.StringVar(&cfg.db.engine, "engine", "", "Database engine")
 
-	flag.DurationVar(&cfg.duration, "duration", 30*time.Second, "Test duration")
-	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 50, "Concurrency limit")
+	flag.DurationVar(&cfg.duration, "duration", 120*time.Minute, "Test duration")
+	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 10, "Concurrency limit")
 
 	flag.Parse()
 
@@ -249,6 +249,9 @@ func main() {
 	}
 
 	logger.Info(fmt.Sprintf("%v transfer requests created in %v, rate of %.0f per second", counter, cfg.duration, float64(counter)/time.Since(start).Seconds()))
+
+	// query transfers table to get the number of transfers per minute
+
 }
 
 func openDB(cfg config) (*sql.DB, error) {
