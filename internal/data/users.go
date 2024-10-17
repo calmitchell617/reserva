@@ -30,8 +30,8 @@ func (m UserModel) GetAll(engine string) ([]*User, error) {
 	switch engine {
 	case "postgresql":
 		return m.GetAllUsersPostgreSQL()
-	case "mariadb":
-		return m.GetAllUsersMariaDB()
+	case "mariadb", "mysql":
+		return m.GetAllUsersMySQL()
 	}
 	return nil, fmt.Errorf("unsupported database engine")
 }
@@ -104,7 +104,7 @@ ORDER BY
 	return users, nil
 }
 
-func (m UserModel) GetAllUsersMariaDB() ([]*User, error) {
+func (m UserModel) GetAllUsersMySQL() ([]*User, error) {
 	query := `
 SELECT
 	users.ID,
@@ -175,13 +175,13 @@ func (m UserModel) GetForToken(tokenHash []byte, engine string) ([]*User, error)
 	switch engine {
 	case "postgresql":
 		return m.GetForTokenPostgreSQL(tokenHash)
-	case "mariadb":
-		return m.GetForTokenMariaDB(tokenHash)
+	case "mariadb", "mysql":
+		return m.GetForTokenMySQL(tokenHash)
 	}
 	return nil, fmt.Errorf("unsupported database engine")
 }
 
-func (m UserModel) GetForTokenMariaDB(tokenHash []byte) ([]*User, error) {
+func (m UserModel) GetForTokenMySQL(tokenHash []byte) ([]*User, error) {
 	query := `
         SELECT users.id, users.organization_id, users.frozen, tokens.hash, tokens.permission_id, tokens.expires_at
         FROM users

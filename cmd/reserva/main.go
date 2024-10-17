@@ -48,14 +48,14 @@ func main() {
 
 	flag.StringVar(&cfg.db.dsn, "db-dsn", "", "PostgreSQL DSN")
 
-	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 50, "PostgreSQL max open connections")
-	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 50, "PostgreSQL max idle connections")
+	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "PostgreSQL max open connections")
+	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "PostgreSQL max idle connections")
 	flag.DurationVar(&cfg.db.maxIdleTime, "db-max-idle-time", 15*time.Minute, "PostgreSQL max connection idle time")
 
 	flag.StringVar(&cfg.db.engine, "engine", "", "Database engine")
 
-	flag.DurationVar(&cfg.duration, "duration", 12*time.Hour, "Test duration")
-	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 50, "Concurrency limit")
+	flag.DurationVar(&cfg.duration, "duration", 10*time.Second, "Test duration")
+	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 25, "Concurrency limit")
 
 	flag.Parse()
 
@@ -261,7 +261,7 @@ func openDB(cfg config) (*sql.DB, error) {
 	switch cfg.db.engine {
 	case "postgresql":
 		driver = "postgres"
-	case "mariadb":
+	case "mariadb", "mysql":
 		driver = "mysql"
 	default:
 		return nil, fmt.Errorf("unsupported database engine")

@@ -25,13 +25,13 @@ func (m *TransferModel) TransferFunds(transfer *Transfer, engine string) error {
 	switch engine {
 	case "postgresql":
 		return m.TransferFundsPostgreSQL(transfer)
-	case "mariadb":
-		return m.TransferFundsMariaDB(transfer)
+	case "mariadb", "mysql":
+		return m.TransferFundsMySQL(transfer)
 	}
 	return fmt.Errorf("unsupported database engine")
 }
 
-func (m *TransferModel) TransferFundsMariaDB(transfer *Transfer) error {
+func (m *TransferModel) TransferFundsMySQL(transfer *Transfer) error {
 	query := `CALL transfer_funds(?, ?, ?, ?, ?, ?);`
 
 	var vTransferID int

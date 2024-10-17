@@ -22,13 +22,13 @@ func (m AccountModel) GetFromCard(card *Card, engine string) (*Account, *Card, e
 	switch engine {
 	case "postgresql":
 		return m.GetFromCardPostgreSQL(card)
-	case "mariadb":
-		return m.GetFromCardMariaDB(card)
+	case "mariadb", "mysql":
+		return m.GetFromCardMySQL(card)
 	}
 	return nil, nil, errors.New("unsupported database engine")
 }
 
-func (m AccountModel) GetFromCardMariaDB(card *Card) (*Account, *Card, error) {
+func (m AccountModel) GetFromCardMySQL(card *Card) (*Account, *Card, error) {
 	query := `
 	SELECT accounts.id, accounts.organization_id, accounts.balance, accounts.frozen, cards.account_id, cards.expiration_date, cards.security_code, cards.frozen
 	FROM accounts

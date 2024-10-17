@@ -19,6 +19,11 @@ benchmark/postgresql: build/reserva
 benchmark/mariadb: build/reserva
 	go run ./cmd/reserva -db-dsn=${MARIADB_BENCHMARK_DSN} -engine=mariadb
 
+## benchmark/mysql: benchmark a mysql db
+.PHONY: benchmark/mysql
+benchmark/mysql: build/reserva
+	go run ./cmd/reserva -db-dsn=${MYSQL_BENCHMARK_DSN} -engine=mysql
+
 # ----------------------------------------------
 # postgresql
 # ----------------------------------------------
@@ -48,3 +53,19 @@ deploy/mariadb:
 .PHONY: prepare/mariadb
 prepare/mariadb:
 	mariadb -h 127.0.0.1 -P 3306 -u root -p${MARIADB_PASSWORD} mysql < migrations/mariadb_init.sql
+
+# ----------------------------------------------
+# mysql
+# ----------------------------------------------
+
+## deploy/mysql: create a mysql docker container
+.PHONY: deploy/mysql
+deploy/mysql:
+	docker rm -f mysql || true
+	docker run --name mysql -e MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD} --platform linux/arm64 -p 3306:3306 -d mysql:9.1.0-oraclelinux9
+
+## prepare/mysql: prepare a mysql db for benchmarking
+.PHONY: prepare/mysql
+prepare/mysql:
+	mysql -h ${MYSQL_HOSTNAME} -P 3306 -u root -p${MYSQL_PASSWORD} mysql < migrations/mysql_init.sql
+
