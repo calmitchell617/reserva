@@ -32,7 +32,7 @@ benchmark/mysql: build/reserva
 .PHONY: deploy/postgresql
 deploy/postgresql:
 	docker rm -f postgresql || true
-	docker run --name postgresql -e POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD} --platform linux/arm64 -p 5432:5432 -d postgres:17.0-bookworm
+	docker run --name postgresql -e POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD} --platform linux/amd64 -p 5432:5432 -d postgres:17.0-bookworm
 
 ## prepare/postgresql: prepare a postgresql db for benchmarking
 .PHONY: prepare/postgresql
@@ -47,7 +47,7 @@ prepare/postgresql:
 .PHONY: deploy/mariadb
 deploy/mariadb:
 	docker rm -f mariadb || true
-	docker run --name mariadb -e MYSQL_ROOT_PASSWORD=${MARIADB_PASSWORD} --platform linux/arm64 -p 3306:3306 -d mariadb:11.5.2-noble
+	docker run --name mariadb -e MYSQL_ROOT_PASSWORD=${MARIADB_PASSWORD} --platform linux/amd64 -p 3306:3306 -d mariadb:11.5.2-noble
 
 ## prepare/mariadb: prepare a mariadb db for benchmarking
 .PHONY: prepare/mariadb
@@ -62,7 +62,7 @@ prepare/mariadb:
 .PHONY: deploy/mysql
 deploy/mysql:
 	docker rm -f mysql || true
-	docker run --name mysql -e MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD} --platform linux/arm64 -p 3306:3306 -d mysql:9.1.0-oraclelinux9
+	docker run --name mysql -e MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD} --platform linux/amd64 -p 3306:3306 -d mysql:9.1.0-oraclelinux9
 
 ## prepare/mysql: prepare a mysql db for benchmarking
 .PHONY: prepare/mysql
