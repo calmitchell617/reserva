@@ -140,7 +140,7 @@ CREATE PROCEDURE InsertAccounts()
 BEGIN
     DECLARE counter INT DEFAULT 1;
 
-    WHILE counter <= 100000 DO
+    WHILE counter <= 1000 DO
         INSERT INTO accounts (id, organization_id, balance, frozen) VALUES (counter, FLOOR(1 + RAND() * 10), 1000000000, FALSE);
         SET counter = counter + 1;
     END WHILE;
@@ -168,7 +168,7 @@ CREATE PROCEDURE InsertCards()
 BEGIN
     DECLARE counter BIGINT DEFAULT 1;
 
-    WHILE counter <= 100000 DO
+    WHILE counter <= 1000 DO
         INSERT INTO cards (id, account_id, expiration_date, security_code, frozen) VALUES (counter, counter, DATE_ADD(NOW(), INTERVAL 1 YEAR), FLOOR(100 + RAND() * 900), FALSE);
         SET counter = counter + 1;
     END WHILE;

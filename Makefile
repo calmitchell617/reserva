@@ -52,7 +52,7 @@ deploy/mariadb:
 ## prepare/mariadb: prepare a mariadb db for benchmarking
 .PHONY: prepare/mariadb
 prepare/mariadb:
-	mariadb -h 127.0.0.1 -P 3306 -u root -p${MARIADB_PASSWORD} mysql < migrations/mariadb_init.sql
+	mysql -h ${MARIADB_HOSTNAME} -P 3306 -u root -p${MARIADB_PASSWORD} mysql < migrations/mariadb_init.sql
 
 # ----------------------------------------------
 # mysql
