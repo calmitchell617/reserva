@@ -4,13 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"expvar"
 	"flag"
 	"fmt"
 	"log/slog"
 	"math/rand"
 	"os"
-	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -23,9 +21,7 @@ import (
 )
 
 type config struct {
-	port int
-	env  string
-	db   struct {
+	db struct {
 		dsn          string
 		maxOpenConns int
 		maxIdleConns int
@@ -34,6 +30,7 @@ type config struct {
 	}
 	duration         time.Duration
 	concurrencyLimit int
+	deletes          bool
 }
 
 type application struct {
@@ -43,19 +40,17 @@ type application struct {
 func main() {
 	var cfg config
 
-	flag.IntVar(&cfg.port, "port", 4000, "API server port")
-	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
-
 	flag.StringVar(&cfg.db.dsn, "db-dsn", "", "PostgreSQL DSN")
 
 	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "PostgreSQL max open connections")
 	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "PostgreSQL max idle connections")
-	flag.DurationVar(&cfg.db.maxIdleTime, "db-max-idle-time", 15*time.Minute, "PostgreSQL max connection idle time")
+	flag.DurationVar(&cfg.db.maxIdleTime, "db-max-idle-time", 15*time.Minute, "Max DB connection idle time")
 
 	flag.StringVar(&cfg.db.engine, "engine", "", "Database engine")
 
-	flag.DurationVar(&cfg.duration, "duration", 10*time.Second, "Test duration")
+	flag.DurationVar(&cfg.duration, "duration", 15*time.Second, "Test duration")
 	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 25, "Concurrency limit")
+	flag.BoolVar(&cfg.deletes, "deletes", true, "Perform deletes during benchmark")
 
 	flag.Parse()
 
@@ -75,18 +70,6 @@ func main() {
 
 	logger.Info("database connection pool established")
 
-	expvar.Publish("goroutines", expvar.Func(func() any {
-		return runtime.NumGoroutine()
-	}))
-
-	expvar.Publish("database", expvar.Func(func() any {
-		return db.Stats()
-	}))
-
-	expvar.Publish("timestamp", expvar.Func(func() any {
-		return time.Now().Unix()
-	}))
-
 	app := &application{
 		models: data.NewModels(db),
 	}
@@ -97,8 +80,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	numUsers := len(users)
-
 	start := time.Now()
 
 	eg := errgroup.Group{}
@@ -107,9 +88,14 @@ func main() {
 	eg.SetLimit(cfg.concurrencyLimit)
 
 	// initialize atomic counter
-	var counter int32
+	var transferCounter int32
+	var deleteCounter int32
 
-	fmt.Printf("Starting test\n\n")
+	transferIds := &SafeInt64Slice{
+		slice: make([]int64, 0),
+	}
+
+	logger.Info("Starting test")
 
 	for time.Since(start) < cfg.duration {
 
@@ -119,9 +105,9 @@ func main() {
 			amount := rand.Int63n(1000)
 
 			// get two random users
-			acquiringUserChoice := users[rand.Intn(numUsers)]
+			_, acquiringUserChoice := users.GetRandom()
 			acquiringAccountID := acquiringUserChoice.AccountID
-			issuingUserChoice := users[rand.Intn(numUsers)]
+			_, issuingUserChoice := users.GetRandom()
 
 			// ensure the users are different
 			if acquiringUserChoice.ID == issuingUserChoice.ID {
@@ -131,7 +117,8 @@ func main() {
 			// get acquiring user and check permission with token
 			users, err := app.models.Users.GetForToken(acquiringUserChoice.Token.Hash, cfg.db.engine)
 			if err != nil {
-				fmt.Printf("error getting user -> %v\n", err)
+				err = fmt.Errorf("error getting user -> %w", err)
+				logger.Error(err.Error())
 				return err
 			}
 
@@ -146,8 +133,9 @@ func main() {
 			}
 
 			if acquiringUser == nil {
-				fmt.Printf("acquiring user not found or does not have permission\n")
-				return errors.New("acquiring user not found or does not have permission")
+				err = fmt.Errorf("acquiring user not found or does not have permission")
+				logger.Error(err.Error())
+				return err
 			}
 
 			acquiringUser.AccountID = acquiringAccountID
@@ -155,38 +143,44 @@ func main() {
 			// get the issuing account info from the card.. this is the info that would come from a POS terminal or payment gateway
 			issuingAccount, card, err := app.models.Accounts.GetFromCard(&issuingUserChoice.Card, cfg.db.engine)
 			if err != nil {
-				fmt.Printf("error getting account from card -> %v\n", err)
+				err = fmt.Errorf("error getting account from card -> %w", err)
+				logger.Error(err.Error())
 				return err
 			}
 
 			// check account balance
 			if issuingAccount.Balance < amount {
-				fmt.Printf("issuing account has insufficient funds\n")
-				return errors.New("issuing account has insufficient funds")
+				err = errors.New("issuing account has insufficient funds")
+				logger.Error(err.Error())
+				return err
 			}
 
 			// check account frozen status
 			if issuingAccount.Frozen {
-				fmt.Printf("issuing account is frozen\n")
-				return errors.New("issuing account is frozen")
+				err = errors.New("issuing account is frozen")
+				logger.Error(err.Error())
+				return err
 			}
 
 			// check card frozen status
 			if card.Frozen {
-				fmt.Printf("issuing card is frozen\n")
-				return errors.New("issuing card is frozen")
+				err = errors.New("issuing card is frozen")
+				logger.Error(err.Error())
+				return err
 			}
 
 			// check card expiration date
 			if card.ExpirationDate.Before(time.Now()) {
-				fmt.Printf("issuing card is expired\n")
-				return errors.New("issuing card is expired")
+				err = errors.New("issuing card is expired")
+				logger.Error(err.Error())
+				return err
 			}
 
 			// check card security code
 			if card.SecurityCode != issuingUserChoice.Card.SecurityCode {
-				fmt.Printf("issuing card security code does not match\n")
-				return errors.New("issuing card security code does not match")
+				err = errors.New("issuing card security code does not match")
+				logger.Error(err.Error())
+				return err
 			}
 
 			// at this point, the issuing org will have to approve the transfer request.
@@ -195,7 +189,8 @@ func main() {
 			// get issuing user and check permission with token
 			users, err = app.models.Users.GetForToken(issuingUserChoice.Token.Hash, cfg.db.engine)
 			if err != nil {
-				fmt.Printf("error getting user -> %v\n", err)
+				err = fmt.Errorf("error getting user -> %w", err)
+				logger.Error(err.Error())
 				return err
 			}
 
@@ -210,18 +205,20 @@ func main() {
 			}
 
 			if issuingUser == nil {
-				fmt.Printf("issuing user not found or does not have permission\n")
-				return errors.New("issuing user not found or does not have permission")
+				err = errors.New("issuing user not found or does not have permission")
+				logger.Error(err.Error())
+				return err
 			}
 
 			// check if the issuing user is in the same organization as the issuing account
 			if issuingUser.OrganizationID != issuingAccount.OrganizationID {
-				fmt.Printf("issuing user does not have permission\n")
-				return errors.New("issuing user does not have permission")
+				err = errors.New("issuing user is not in the same organization as the issuing account")
+				logger.Error(err.Error())
+				return err
 			}
 
 			// create a transfer
-			transfer := data.Transfer{
+			transfer := &data.Transfer{
 				CardID:         card.ID,
 				FromAccountID:  issuingAccount.ID,
 				ToAccountID:    acquiringUser.AccountID,
@@ -230,13 +227,35 @@ func main() {
 				CreatedAt:      time.Now(),
 			}
 
-			err = app.models.Transfers.TransferFunds(&transfer, cfg.db.engine)
+			transfer, err = app.models.Transfers.TransferFunds(transfer, cfg.db.engine)
 			if err != nil {
-				fmt.Printf("error transferring funds -> %v\n", err)
+				err = fmt.Errorf("error transferring funds -> %w", err)
+				logger.Error(err.Error())
 				return err
 			}
 
-			atomic.AddInt32(&counter, 1)
+			atomic.AddInt32(&transferCounter, 1)
+
+			if cfg.deletes {
+				transferIds.Add(transfer.ID)
+
+				if transferCounter != 0 && transferCounter%20 == 0 {
+					toDeleteIdx, toDeleteElement, err := transferIds.GetRandom()
+					if err != nil {
+						err = fmt.Errorf("error getting random transfer -> %w", err)
+						logger.Error(err.Error())
+						return err
+					}
+					err = app.models.Transfers.Delete(toDeleteElement, cfg.db.engine)
+					if err != nil {
+						err = fmt.Errorf("error deleting transfer -> %w", err)
+						logger.Error(err.Error())
+						return err
+					}
+					transferIds.Remove(toDeleteIdx)
+					atomic.AddInt32(&deleteCounter, 1)
+				}
+			}
 
 			return nil
 		})
@@ -248,10 +267,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger.Info(fmt.Sprintf("%v transfer requests created in %v, rate of %.0f per second", counter, cfg.duration, float64(counter)/time.Since(start).Seconds()))
-
-	// query transfers table to get the number of transfers per minute
-
+	if cfg.deletes {
+		logger.Info(fmt.Sprintf("%v completed %v transfers and %v deletes in %v, rate of %.0f per second", cfg.db.engine, transferCounter, deleteCounter, cfg.duration, float64(transferCounter+deleteCounter)/time.Since(start).Seconds()))
+	} else {
+		logger.Info(fmt.Sprintf("%v completed %v transfers in %v, rate of %.0f per second", cfg.db.engine, transferCounter, cfg.duration, float64(transferCounter)/time.Since(start).Seconds()))
+	}
 }
 
 func openDB(cfg config) (*sql.DB, error) {

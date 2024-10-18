@@ -123,7 +123,7 @@ SELECT
     1000000000, -- everyone in my country is a billionaire. inflation be damned
     FALSE
 FROM
-    generate_series(1, 1000000) AS series_column;
+    generate_series(1, 100000) AS series_column;
 
 INSERT INTO users(id, organization_id, frozen)
 SELECT
@@ -147,7 +147,7 @@ SELECT
     random() * 999 + 1,
     FALSE
 FROM
-    generate_series(1, 1000000) AS series_column;
+    generate_series(1, 100000) AS series_column;
 
 INSERT INTO
     tokens(user_id, permission_id, expires_at)

@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math/rand"
+	"sync"
 	"time"
 )
-
-var AnonymousUser = &User{}
 
 type User struct {
 	ID             int64 `json:"id"`
@@ -18,15 +18,42 @@ type User struct {
 	Token          Token `json:"token"`
 }
 
-func (u *User) IsAnonymous() bool {
-	return u == AnonymousUser
-}
-
 type UserModel struct {
 	DB *sql.DB
 }
 
-func (m UserModel) GetAll(engine string) ([]*User, error) {
+type SafeUserSlice struct {
+	mu    sync.Mutex
+	slice []User
+}
+
+func (s *SafeUserSlice) Add(element User) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.slice = append(s.slice, element)
+}
+
+func (s *SafeUserSlice) GetRandom() (index int64, element User) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.slice) == 0 {
+		return
+	}
+
+	index = rand.Int63n(int64(len(s.slice)))
+
+	element = s.slice[index]
+
+	return index, element
+}
+
+func (s *SafeUserSlice) Remove(index int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.slice = append(s.slice[:index], s.slice[index+1:]...)
+}
+
+func (m UserModel) GetAll(engine string) (*SafeUserSlice, error) {
 	switch engine {
 	case "postgresql":
 		return m.GetAllUsersPostgreSQL()
@@ -36,7 +63,7 @@ func (m UserModel) GetAll(engine string) ([]*User, error) {
 	return nil, fmt.Errorf("unsupported database engine")
 }
 
-func (m UserModel) GetAllUsersPostgreSQL() ([]*User, error) {
+func (m UserModel) GetAllUsersPostgreSQL() (*SafeUserSlice, error) {
 	query := `
 SELECT
 	USERS.ID,
@@ -68,7 +95,7 @@ ORDER BY
 	}
 	defer rows.Close()
 
-	users := []*User{}
+	users := SafeUserSlice{}
 
 	for rows.Next() {
 
@@ -94,17 +121,17 @@ ORDER BY
 		user.Card = card
 		user.Token = token
 
-		users = append(users, &user)
+		users.Add(user)
 	}
 
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating rows: %v", err)
 	}
 
-	return users, nil
+	return &users, nil
 }
 
-func (m UserModel) GetAllUsersMySQL() ([]*User, error) {
+func (m UserModel) GetAllUsersMySQL() (*SafeUserSlice, error) {
 	query := `
 SELECT
 	users.ID,
@@ -136,7 +163,7 @@ ORDER BY
 	}
 	defer rows.Close()
 
-	users := []*User{}
+	users := SafeUserSlice{}
 
 	for rows.Next() {
 		var user User
@@ -161,14 +188,14 @@ ORDER BY
 		user.Card = card
 		user.Token = token
 
-		users = append(users, &user)
+		users.Add(user)
 	}
 
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating rows: %v", err)
 	}
 
-	return users, nil
+	return &users, nil
 }
 
 func (m UserModel) GetForToken(tokenHash []byte, engine string) ([]*User, error) {

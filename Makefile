@@ -24,6 +24,11 @@ benchmark/mariadb: build/reserva
 benchmark/mysql: build/reserva
 	go run ./cmd/reserva -db-dsn=${MYSQL_BENCHMARK_DSN} -engine=mysql
 
+## benchmark/all: benchmark all dem docker dbs
+.PHONY: benchmark/all
+benchmark/all: build/reserva
+	bash -c "go run ./cmd/reserva -db-dsn=${MYSQL_BENCHMARK_DSN} -engine=mysql & go run ./cmd/reserva -db-dsn=${POSTGRESQL_BENCHMARK_DSN} -engine=postgresql & go run ./cmd/reserva -db-dsn=${MARIADB_BENCHMARK_DSN} -engine=mariadb & wait"
+
 # ----------------------------------------------
 # postgresql
 # ----------------------------------------------
@@ -52,7 +57,7 @@ deploy/mariadb:
 ## prepare/mariadb: prepare a mariadb db for benchmarking
 .PHONY: prepare/mariadb
 prepare/mariadb:
-	mysql -h ${MARIADB_HOSTNAME} -P 3306 -u root -p${MARIADB_PASSWORD} mysql < migrations/mariadb_init.sql
+	mysql -h ${MARIADB_HOSTNAME} -P 3306 -u root -p${MARIADB_PASSWORD} mysql < migrations/mysql_init.sql
 
 # ----------------------------------------------
 # mysql
@@ -69,3 +74,9 @@ deploy/mysql:
 prepare/mysql:
 	mysql -h ${MYSQL_HOSTNAME} -P 3306 -u root -p${MYSQL_PASSWORD} mysql < migrations/mysql_init.sql
 
+# ALL
+
+## prepare/all: prepare all dbs for benchmarking
+.PHONY: prepare/all
+prepare/all:
+	time bash -c "psql ${POSTGRESQL_SETUP_DSN} -q -f migrations/postgresql_init.sql & mysql -h ${MARIADB_HOSTNAME} -P 3306 -u root -p${MARIADB_PASSWORD} mysql < migrations/mysql_init.sql & mysql -h ${MYSQL_HOSTNAME} -P 3306 -u root -p${MYSQL_PASSWORD} mysql < migrations/mysql_init.sql & wait"
