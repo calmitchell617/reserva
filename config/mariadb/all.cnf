@@ -1,0 +1,10 @@
+[mariadb]
+
+innodb_doublewrite = 1
+innodb_flush_method = O_DIRECT
+innodb_log_file_size = 512M
+innodb_buffer_pool_size = 5G
+innodb_io_capacity = 5000
+thread_cache_size = 16
+thread_pool_size = 4
+innodb_file_per_table = 1

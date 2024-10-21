@@ -52,7 +52,7 @@ prepare/postgresql:
 .PHONY: deploy/mariadb
 deploy/mariadb:
 	docker rm -f mariadb || true
-	docker run --name mariadb -e MYSQL_ROOT_PASSWORD=${MARIADB_PASSWORD} --platform linux/amd64 -p 3306:3306 -d mariadb:11.5.2-noble
+	docker run --name mariadb -v ./config/mariadb/1.cnf:/etc/mysql/conf.d/1.cnf -e MYSQL_ROOT_PASSWORD=${MARIADB_PASSWORD} --platform linux/amd64 -p 3306:3306 -d mariadb:11.5.2-noble
 
 ## prepare/mariadb: prepare a mariadb db for benchmarking
 .PHONY: prepare/mariadb
