@@ -37,7 +37,7 @@ benchmark/all: build/reserva
 .PHONY: deploy/postgresql
 deploy/postgresql:
 	docker rm -f postgresql || true
-	docker run --name postgresql -e POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD} --platform linux/amd64 -p 5432:5432 -d postgres:17.0-bookworm
+	docker run --name postgresql -v ./config/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf -e POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD} --platform linux/amd64 -p 5432:5432 -d postgres:17.0-bookworm  -c 'config_file=/etc/postgresql/postgresql.conf'
 
 ## prepare/postgresql: prepare a postgresql db for benchmarking
 .PHONY: prepare/postgresql
@@ -67,7 +67,7 @@ prepare/mariadb:
 .PHONY: deploy/mysql
 deploy/mysql:
 	docker rm -f mysql || true
-	docker run --name mysql -e MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD} --platform linux/amd64 -p 3306:3306 -d mysql:9.1.0-oraclelinux9
+	docker run --name mysql -v ./config/mysql/my.cnf:/etc/mysql/conf.d/my.cnf -e MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD} --platform linux/amd64 -p 3306:3306 -d mysql:9.1.0-oraclelinux9
 
 ## prepare/mysql: prepare a mysql db for benchmarking
 .PHONY: prepare/mysql
