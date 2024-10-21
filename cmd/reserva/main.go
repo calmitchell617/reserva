@@ -48,7 +48,7 @@ func main() {
 
 	flag.StringVar(&cfg.db.engine, "engine", "", "Database engine")
 
-	flag.DurationVar(&cfg.duration, "duration", 30*time.Minute, "Test duration")
+	flag.DurationVar(&cfg.duration, "duration", 2*time.Hour, "Test duration")
 	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 25, "Concurrency limit")
 	flag.BoolVar(&cfg.deletes, "deletes", true, "Perform deletes during benchmark")
 
@@ -95,9 +95,19 @@ func main() {
 		slice: make([]int64, 0),
 	}
 
-	logger.Info("Starting test")
+	logger.Info(fmt.Sprintf("Starting test of %v", cfg.db.engine))
+
+	lastTransferCheckTime := time.Now()
+	var lastTransferPlusDeletes int32 = 0
 
 	for time.Since(start) < cfg.duration {
+
+		if time.Since(lastTransferCheckTime) > 10*time.Second {
+			transferPlusDeletes := atomic.LoadInt32(&transferCounter) + atomic.LoadInt32(&deleteCounter)
+			logger.Info(fmt.Sprintf("%v completing %.0f transfers plus deletes per second", cfg.db.engine, float64(transferPlusDeletes-lastTransferPlusDeletes)/time.Since(lastTransferCheckTime).Seconds()))
+			lastTransferCheckTime = time.Now()
+			lastTransferPlusDeletes = transferPlusDeletes
+		}
 
 		eg.Go(func() error {
 
