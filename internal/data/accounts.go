@@ -5,110 +5,97 @@ import (
 	"database/sql"
 	"errors"
 	"time"
-
-	"github.com/calmitchell617/reserva/internal/validator"
 )
 
 type Account struct {
-	ID          int64 `json:"id"`
-	UserID      int64 `json:"user_id"`
-	Balance     int64 `json:"balance"`
-	HoldBalance int64 `json:"hold_balance"`
-	Version     int   `json:"-"`
-}
-
-func ValidateAccount(v *validator.Validator, account *Account) {
-	if account.UserID == 0 {
-		panic("missing user id for account")
-	}
-
-	if account.Version == 0 {
-		panic("missing version for account")
-	}
+	ID             int64 `json:"id"`
+	OrganizationID int64 `json:"organization_id"`
+	Balance        int64 `json:"balance"`
+	Frozen         bool  `json:"frozen"`
 }
 
 type AccountModel struct {
 	DB *sql.DB
 }
 
-func (m AccountModel) Insert(account *Account) error {
-	query := `
-        INSERT INTO accounts (user_id, balance, hold_balance, version)
-		VALUES ($1, $2, $3, $4)
-        RETURNING id`
-
-	args := []any{account.UserID, account.Balance, account.HoldBalance, account.Version}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	return m.DB.QueryRowContext(ctx, query, args...).Scan(&account.ID)
+func (m AccountModel) GetFromCard(card *Card, engine string) (*Account, *Card, error) {
+	switch engine {
+	case "postgresql":
+		return m.GetFromCardPostgreSQL(card)
+	case "mariadb", "mysql":
+		return m.GetFromCardMySQL(card)
+	}
+	return nil, nil, errors.New("unsupported database engine")
 }
 
-func (m AccountModel) Get(id int64, userId int64) (*Account, error) {
-	if id < 1 {
-		return nil, ErrRecordNotFound
-	}
-
+func (m AccountModel) GetFromCardMySQL(card *Card) (*Account, *Card, error) {
 	query := `
-        SELECT id, balance, hold_balance, version
-		FROM accounts
-        WHERE id = $1
-		AND user_id = $2`
+	SELECT accounts.id, accounts.organization_id, accounts.balance, accounts.frozen, cards.account_id, cards.expiration_date, cards.security_code, cards.frozen
+	FROM accounts
+	JOIN cards ON accounts.id = cards.account_id
+	WHERE cards.id = ?
+	`
 
-	account := Account{
-		UserID: userId,
-	}
+	var account Account
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	err := m.DB.QueryRowContext(ctx, query, id, userId).Scan(
+	err := m.DB.QueryRowContext(ctx, query, card.ID).Scan(
 		&account.ID,
+		&account.OrganizationID,
 		&account.Balance,
-		&account.HoldBalance,
-		&account.Version,
+		&account.Frozen,
+		&card.AccountID,
+		&card.ExpirationDate,
+		&card.SecurityCode,
+		&card.Frozen,
 	)
 
 	if err != nil {
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			return nil, ErrRecordNotFound
+			return nil, nil, ErrRecordNotFound
 		default:
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
-	return &account, nil
+	return &account, card, nil
 }
 
-func (m AccountModel) Update(account *Account) error {
+func (m AccountModel) GetFromCardPostgreSQL(card *Card) (*Account, *Card, error) {
 	query := `
-        UPDATE accounts
-		SET balance = $1, hold_balance = $2, version = version + 1
-		WHERE id = $3 AND version = $4 AND user_id = $5
-        RETURNING version`
+	SELECT accounts.id, accounts.organization_id, accounts.balance, accounts.frozen, cards.account_id, cards.expiration_date, cards.security_code, cards.frozen
+	FROM accounts
+	JOIN cards ON accounts.id = cards.account_id
+	WHERE cards.id = $1
+	`
 
-	args := []any{
-		account.Balance,
-		account.HoldBalance,
-		account.ID,
-		account.Version,
-		account.UserID,
-	}
+	var account Account
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	err := m.DB.QueryRowContext(ctx, query, args...).Scan(&account.Version)
+	err := m.DB.QueryRowContext(ctx, query, card.ID).Scan(
+		&account.ID,
+		&account.OrganizationID,
+		&account.Balance,
+		&account.Frozen,
+		&card.AccountID,
+		&card.ExpirationDate,
+		&card.SecurityCode,
+		&card.Frozen,
+	)
+
 	if err != nil {
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			return ErrEditConflict
+			return nil, nil, ErrRecordNotFound
 		default:
-			return err
+			return nil, nil, err
 		}
 	}
 
-	return nil
+	return &account, card, nil
 }

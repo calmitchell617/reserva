@@ -2,239 +2,304 @@ package data
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"errors"
+	"fmt"
+	"math/rand"
+	"sync"
 	"time"
-
-	"github.com/calmitchell617/reserva/internal/validator"
-
-	"golang.org/x/crypto/bcrypt"
 )
-
-var (
-	ErrDuplicateEmail      = errors.New("duplicate email")
-	ErrDuplicateExternalID = errors.New("duplicate external ID")
-	ErrDuplicateEndpoint   = errors.New("duplicate endpoint")
-)
-
-var AnonymousUser = &User{}
 
 type User struct {
-	ID         int64    `json:"id"`
-	ExternalID string   `json:"external_id"`
-	IsAdmin    bool     `json:"is_admin"`
-	Endpoint   string   `json:"endpoint"`
-	Active     bool     `json:"active"`
-	Email      string   `json:"email"`
-	Password   password `json:"-"`
-	Version    int      `json:"-"`
-}
-
-func (u *User) IsAnonymous() bool {
-	return u == AnonymousUser
-}
-
-type password struct {
-	plaintext *string
-	hash      []byte
-}
-
-func (p *password) Set(plaintextPassword string) error {
-	hash, err := bcrypt.GenerateFromPassword([]byte(plaintextPassword), 12)
-	if err != nil {
-		return err
-	}
-
-	p.plaintext = &plaintextPassword
-	p.hash = hash
-
-	return nil
-}
-
-func (p *password) Matches(plaintextPassword string) (bool, error) {
-	err := bcrypt.CompareHashAndPassword(p.hash, []byte(plaintextPassword))
-	if err != nil {
-		switch {
-		case errors.Is(err, bcrypt.ErrMismatchedHashAndPassword):
-			return false, nil
-		default:
-			return false, err
-		}
-	}
-
-	return true, nil
-}
-
-func ValidateEmail(v *validator.Validator, email string) {
-	v.Check(email != "", "email", "must be provided")
-	v.Check(validator.Matches(email, validator.EmailRX), "email", "must be a valid email address")
-}
-
-func ValidatePasswordPlaintext(v *validator.Validator, password string) {
-	v.Check(password != "", "password", "must be provided")
-	v.Check(len(password) >= 8, "password", "must be at least 8 bytes long")
-	v.Check(len(password) <= 72, "password", "must not be more than 72 bytes long")
-}
-
-func ValidateUser(v *validator.Validator, user *User) {
-	v.Check(user.ExternalID != "", "external_id", "must be provided")
-	v.Check(user.Endpoint != "", "endpoint", "must be provided")
-
-	ValidateEmail(v, user.Email)
-
-	if user.Password.plaintext != nil {
-		ValidatePasswordPlaintext(v, *user.Password.plaintext)
-	}
-
-	if user.Password.hash == nil {
-		panic("missing password hash for user")
-	}
-
-	if user.Version == 0 {
-		panic("missing version for user")
-	}
+	ID             int64 `json:"id"`
+	OrganizationID int64 `json:"organization_id"`
+	Frozen         bool  `json:"frozen"`
+	AccountID      int64 `json:"account_id"`
+	Card           Card  `json:"card"`
+	Token          Token `json:"token"`
 }
 
 type UserModel struct {
 	DB *sql.DB
 }
 
-func (m UserModel) Insert(user *User) error {
-	query := `INSERT INTO users(external_id, is_admin, endpoint, active, email, password_hash, version)
-	VALUES ($1, $2, $3, $4, $5, $6, $7)
-	RETURNING id`
-
-	args := []any{user.ExternalID, user.IsAdmin, user.Endpoint, user.Active, user.Email, user.Password.hash, user.Version}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	err := m.DB.QueryRowContext(ctx, query, args...).Scan(&user.ID)
-	if err != nil {
-		switch {
-		case err.Error() == `pq: duplicate key value violates unique constraint "users_email_key"`:
-			return ErrDuplicateEmail
-		case err.Error() == `pq: duplicate key value violates unique constraint "users_external_id_key"`:
-			return ErrDuplicateExternalID
-		case err.Error() == `pq: duplicate key value violates unique constraint "users_endpoint_key"`:
-			return ErrDuplicateEndpoint
-		default:
-			return err
-		}
-	}
-
-	return nil
+type SafeUserSlice struct {
+	mu    sync.Mutex
+	slice []User
 }
 
-func (m UserModel) GetByEmail(email string) (*User, error) {
-	query := `SELECT id, external_id, is_admin, endpoint, active, email, password_hash, version FROM users WHERE email = $1`
-
-	var user User
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	err := m.DB.QueryRowContext(ctx, query, email).Scan(
-		&user.ID,
-		&user.ExternalID,
-		&user.IsAdmin,
-		&user.Endpoint,
-		&user.Active,
-		&user.Email,
-		&user.Password.hash,
-		&user.Version,
-	)
-
-	if err != nil {
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			return nil, ErrRecordNotFound
-		default:
-			return nil, err
-		}
-	}
-
-	return &user, nil
+func (s *SafeUserSlice) Add(element User) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.slice = append(s.slice, element)
 }
 
-func (m UserModel) Update(user *User) error {
+func (s *SafeUserSlice) GetRandom() (index int64, element User) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.slice) == 0 {
+		return
+	}
+
+	index = rand.Int63n(int64(len(s.slice)))
+
+	element = s.slice[index]
+
+	return index, element
+}
+
+func (s *SafeUserSlice) Remove(index int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.slice = append(s.slice[:index], s.slice[index+1:]...)
+}
+
+func (m UserModel) GetAll(engine string) (*SafeUserSlice, error) {
+	switch engine {
+	case "postgresql":
+		return m.GetAllUsersPostgreSQL()
+	case "mariadb", "mysql":
+		return m.GetAllUsersMySQL()
+	}
+	return nil, fmt.Errorf("unsupported database engine")
+}
+
+func (m UserModel) GetAllUsersPostgreSQL() (*SafeUserSlice, error) {
 	query := `
-        UPDATE users 
-		SET external_id = $1, is_admin = $2, endpoint = $3, active = $4, email = $5, password_hash = $6, version = version + 1
-		WHERE id = $7 AND version = $8
-        RETURNING version`
+SELECT
+	USERS.ID,
+	USERS.ORGANIZATION_ID AS ORGANIZATION_ID,
+	USERS.FROZEN,
+	ACCOUNTS.ID AS ACCOUNT_ID,
+	CARDS.ID AS CARD_ID,
+	CARDS.Expiration_Date as Expiration_Date,
+	CARDS.SECURITY_CODE as security_code,
+	CARDS.FROZEN as card_frozen,
+	tokens.HASH 
+FROM
+	USERS
+	JOIN ORGANIZATIONS ON USERS.ORGANIZATION_ID = ORGANIZATIONS.ID
+	JOIN ACCOUNTS ON ORGANIZATIONS.ID = ACCOUNTS.ORGANIZATION_ID
+	JOIN TOKENS ON USERS.ID = TOKENS.USER_ID
+	JOIN CARDS ON ACCOUNTS.ID = CARDS.ACCOUNT_ID
+ORDER BY
+	USERS.ID,
+	ORGANIZATION_ID,
+	ACCOUNT_ID`
 
-	args := []any{
-		user.ExternalID,
-		user.IsAdmin,
-		user.Endpoint,
-		user.Active,
-		user.Email,
-		user.Password.hash,
-		user.ID,
-		user.Version,
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err := m.DB.QueryRowContext(ctx, query, args...).Scan(&user.Version)
+	rows, err := m.DB.QueryContext(ctx, query)
 	if err != nil {
-		switch {
-		case err.Error() == `pq: duplicate key value violates unique constraint "users_email_key"`:
-			return ErrDuplicateEmail
-		case err.Error() == `pq: duplicate key value violates unique constraint "users_external_id_key"`:
-			return ErrDuplicateExternalID
-		case err.Error() == `pq: duplicate key value violates unique constraint "users_endpoint_key"`:
-			return ErrDuplicateEndpoint
-		case errors.Is(err, sql.ErrNoRows):
-			return ErrEditConflict
-		default:
-			return err
+		return nil, fmt.Errorf("error running query: %v", err)
+	}
+	defer rows.Close()
+
+	users := SafeUserSlice{}
+
+	for rows.Next() {
+
+		var user User
+		var card Card
+		var token Token
+
+		err := rows.Scan(
+			&user.ID,
+			&user.OrganizationID,
+			&user.Frozen,
+			&user.AccountID,
+			&card.ID,
+			&card.ExpirationDate,
+			&card.SecurityCode,
+			&card.Frozen,
+			&token.Hash,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning row: %v", err)
 		}
+
+		user.Card = card
+		user.Token = token
+
+		users.Add(user)
 	}
 
-	return nil
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %v", err)
+	}
+
+	return &users, nil
 }
 
-func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error) {
-	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
-
+func (m UserModel) GetAllUsersMySQL() (*SafeUserSlice, error) {
 	query := `
-        SELECT users.id, users.external_id, users.is_admin, users.endpoint, users.active, users.email, users.password_hash, users.version
+SELECT
+	users.ID,
+	users.ORGANIZATION_ID AS ORGANIZATION_ID,
+	users.FROZEN,
+	accounts.ID AS ACCOUNT_ID,
+	cards.ID AS CARD_ID,
+	cards.Expiration_Date as Expiration_Date,
+	cards.SECURITY_CODE as security_code,
+	cards.FROZEN as card_frozen,
+	tokens.HASH 
+FROM
+	users
+	JOIN organizations ON users.ORGANIZATION_ID = organizations.ID
+	JOIN accounts ON organizations.ID = accounts.ORGANIZATION_ID
+	JOIN tokens ON users.ID = tokens.USER_ID
+	JOIN cards ON accounts.ID = cards.ACCOUNT_ID
+ORDER BY
+	users.ID,
+	ORGANIZATION_ID,
+	ACCOUNT_ID`
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	rows, err := m.DB.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("error running query: %v", err)
+	}
+	defer rows.Close()
+
+	users := SafeUserSlice{}
+
+	for rows.Next() {
+		var user User
+		var card Card
+		var token Token
+
+		err := rows.Scan(
+			&user.ID,
+			&user.OrganizationID,
+			&user.Frozen,
+			&user.AccountID,
+			&card.ID,
+			&card.ExpirationDate,
+			&card.SecurityCode,
+			&card.Frozen,
+			&token.Hash,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning row: %v", err)
+		}
+
+		user.Card = card
+		user.Token = token
+
+		users.Add(user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %v", err)
+	}
+
+	return &users, nil
+}
+
+func (m UserModel) GetForToken(tokenHash []byte, engine string) ([]*User, error) {
+	switch engine {
+	case "postgresql":
+		return m.GetForTokenPostgreSQL(tokenHash)
+	case "mariadb", "mysql":
+		return m.GetForTokenMySQL(tokenHash)
+	}
+	return nil, fmt.Errorf("unsupported database engine")
+}
+
+func (m UserModel) GetForTokenMySQL(tokenHash []byte) ([]*User, error) {
+	query := `
+        SELECT users.id, users.organization_id, users.frozen, tokens.hash, tokens.permission_id, tokens.expires_at
         FROM users
         INNER JOIN tokens
         ON users.id = tokens.user_id
-        WHERE tokens.hash = $1
-        AND tokens.scope = $2 
-        AND tokens.expires_at > $3`
+        WHERE tokens.hash = ?`
 
-	args := []any{tokenHash[:], tokenScope, time.Now()}
-
-	var user User
+	var users []*User
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	err := m.DB.QueryRowContext(ctx, query, args...).Scan(
-		&user.ID,
-		&user.ExternalID,
-		&user.IsAdmin,
-		&user.Endpoint,
-		&user.Active,
-		&user.Email,
-		&user.Password.hash,
-		&user.Version,
-	)
+	rows, err := m.DB.QueryContext(ctx, query, tokenHash)
 	if err != nil {
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			return nil, ErrRecordNotFound
-		default:
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+
+		var user User
+		var token Token
+
+		err := rows.Scan(
+			&user.ID,
+			&user.OrganizationID,
+			&user.Frozen,
+			&token.Hash,
+			&token.PermissionID,
+			&token.ExpiresAt,
+		)
+		if err != nil {
 			return nil, err
 		}
+
+		user.Token = token
+
+		users = append(users, &user)
 	}
 
-	return &user, nil
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}
+
+func (m UserModel) GetForTokenPostgreSQL(tokenHash []byte) ([]*User, error) {
+	query := `
+        SELECT users.id, users.organization_id, users.frozen, tokens.hash, tokens.permission_id, tokens.expires_at
+        FROM users
+        INNER JOIN tokens
+        ON users.id = tokens.user_id
+        WHERE tokens.hash = $1`
+
+	var users []*User
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	rows, err := m.DB.QueryContext(ctx, query, tokenHash)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+
+		var user User
+		var token Token
+
+		err := rows.Scan(
+			&user.ID,
+			&user.OrganizationID,
+			&user.Frozen,
+			&token.Hash,
+			&token.PermissionID,
+			&token.ExpiresAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		user.Token = token
+
+		users = append(users, &user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return users, nil
 }
