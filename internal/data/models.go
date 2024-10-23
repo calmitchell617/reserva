@@ -17,11 +17,23 @@ type Models struct {
 	Users     UserModel
 }
 
-func NewModels(db *sql.DB) Models {
+func NewModels(writeDb *sql.DB, readDb *sql.DB) Models {
 	return Models{
-		Accounts:  AccountModel{DB: db},
-		Cards:     CardModel{DB: db},
-		Transfers: TransferModel{DB: db},
-		Users:     UserModel{DB: db},
+		Accounts: AccountModel{
+			WriteDB: writeDb,
+			ReadDb:  readDb,
+		},
+		Cards: CardModel{
+			WriteDb: writeDb,
+			ReadDb:  readDb,
+		},
+		Transfers: TransferModel{
+			WriteDb: writeDb,
+			ReadDb:  readDb,
+		},
+		Users: UserModel{
+			WriteDb: writeDb,
+			ReadDb:  readDb,
+		},
 	}
 }

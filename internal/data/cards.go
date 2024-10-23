@@ -14,5 +14,6 @@ type Card struct {
 }
 
 type CardModel struct {
-	DB *sql.DB
+	WriteDb *sql.DB
+	ReadDb  *sql.DB
 }

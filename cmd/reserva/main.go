@@ -23,11 +23,13 @@ import (
 type config struct {
 	name string
 	db   struct {
-		dsn          string
-		maxOpenConns int
-		maxIdleConns int
-		maxIdleTime  time.Duration
-		engine       string
+		readDsn        string
+		writeDsn       string
+		hasReadReplica bool
+		maxOpenConns   int
+		maxIdleConns   int
+		maxIdleTime    time.Duration
+		engine         string
 	}
 	duration         time.Duration
 	concurrencyLimit int
@@ -41,11 +43,14 @@ type application struct {
 func main() {
 	var cfg config
 
-	flag.StringVar(&cfg.db.dsn, "db-dsn", "", "PostgreSQL DSN")
 	flag.StringVar(&cfg.name, "name", "", "Name of system")
 
-	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "PostgreSQL max open connections")
-	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "PostgreSQL max idle connections")
+	flag.StringVar(&cfg.db.writeDsn, "write-dsn", "", "Write DSN")
+	flag.StringVar(&cfg.db.readDsn, "read-dsn", "", "Read DSN")
+
+	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "Max open connections")
+	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "Max idle connections")
+
 	flag.DurationVar(&cfg.db.maxIdleTime, "db-max-idle-time", 15*time.Minute, "Max DB connection idle time")
 
 	flag.StringVar(&cfg.db.engine, "engine", "", "Database engine")
@@ -67,17 +72,27 @@ func main() {
 		cfg.name = cfg.db.engine
 	}
 
-	db, err := openDB(cfg)
+	cfg.db.hasReadReplica = true
+
+	if cfg.db.readDsn == "" {
+		cfg.db.readDsn = cfg.db.writeDsn
+		cfg.db.hasReadReplica = false
+	}
+
+	writeDb, readDb, err := openDB(cfg)
 	if err != nil {
 		logger.Error(fmt.Errorf("error opening database connection: %w", err).Error())
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer writeDb.Close()
+	if cfg.db.hasReadReplica {
+		defer readDb.Close()
+	}
 
 	logger.Info("database connection pool established")
 
 	app := &application{
-		models: data.NewModels(db),
+		models: data.NewModels(writeDb, readDb),
 	}
 
 	users, err := app.models.Users.GetAll(cfg.db.engine)
@@ -121,9 +136,9 @@ func main() {
 			amount := rand.Int63n(1000)
 
 			// get two random users
-			_, acquiringUserChoice := users.GetRandom()
+			_, acquiringUserChoice := users.GetKindaRandom()
 			acquiringAccountID := acquiringUserChoice.AccountID
-			_, issuingUserChoice := users.GetRandom()
+			_, issuingUserChoice := users.GetKindaRandom()
 
 			// ensure the users are different
 			if acquiringUserChoice.ID == issuingUserChoice.ID {
@@ -290,7 +305,7 @@ func main() {
 	}
 }
 
-func openDB(cfg config) (*sql.DB, error) {
+func openDB(cfg config) (writeDb *sql.DB, readDb *sql.DB, err error) {
 
 	var driver string
 
@@ -300,26 +315,48 @@ func openDB(cfg config) (*sql.DB, error) {
 	case "mariadb", "mysql":
 		driver = "mysql"
 	default:
-		return nil, fmt.Errorf("unsupported database engine")
+		return nil, nil, fmt.Errorf("unsupported database engine")
 	}
 
-	db, err := sql.Open(driver, cfg.db.dsn)
+	writeDb, err = sql.Open(driver, cfg.db.writeDsn)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	db.SetMaxOpenConns(cfg.db.maxOpenConns)
-	db.SetMaxIdleConns(cfg.db.maxIdleConns)
-	db.SetConnMaxIdleTime(cfg.db.maxIdleTime)
+	writeDb.SetMaxOpenConns(cfg.db.maxOpenConns)
+	writeDb.SetMaxIdleConns(cfg.db.maxIdleConns)
+	writeDb.SetConnMaxIdleTime(cfg.db.maxIdleTime)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err = db.PingContext(ctx)
+	err = writeDb.PingContext(ctx)
 	if err != nil {
-		db.Close()
-		return nil, err
+		writeDb.Close()
+		return nil, nil, err
 	}
 
-	return db, nil
+	readDb = writeDb
+
+	if cfg.db.hasReadReplica {
+		readDb, err = sql.Open(driver, cfg.db.readDsn)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		readDb.SetMaxOpenConns(cfg.db.maxOpenConns)
+		readDb.SetMaxIdleConns(cfg.db.maxIdleConns)
+		readDb.SetConnMaxIdleTime(cfg.db.maxIdleTime)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err = readDb.PingContext(ctx)
+		if err != nil {
+			readDb.Close()
+			return nil, nil, err
+		}
+	}
+
+	return writeDb, readDb, nil
 }

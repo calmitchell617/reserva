@@ -15,7 +15,8 @@ type Account struct {
 }
 
 type AccountModel struct {
-	DB *sql.DB
+	WriteDB *sql.DB
+	ReadDb  *sql.DB
 }
 
 func (m AccountModel) GetFromCard(card *Card, engine string) (*Account, *Card, error) {
@@ -41,7 +42,7 @@ func (m AccountModel) GetFromCardMySQL(card *Card) (*Account, *Card, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	err := m.DB.QueryRowContext(ctx, query, card.ID).Scan(
+	err := m.ReadDb.QueryRowContext(ctx, query, card.ID).Scan(
 		&account.ID,
 		&account.OrganizationID,
 		&account.Balance,
@@ -77,7 +78,7 @@ func (m AccountModel) GetFromCardPostgreSQL(card *Card) (*Account, *Card, error)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	err := m.DB.QueryRowContext(ctx, query, card.ID).Scan(
+	err := m.ReadDb.QueryRowContext(ctx, query, card.ID).Scan(
 		&account.ID,
 		&account.OrganizationID,
 		&account.Balance,

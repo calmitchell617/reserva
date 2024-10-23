@@ -19,7 +19,8 @@ type User struct {
 }
 
 type UserModel struct {
-	DB *sql.DB
+	WriteDb *sql.DB
+	ReadDb  *sql.DB
 }
 
 type SafeUserSlice struct {
@@ -41,6 +42,34 @@ func (s *SafeUserSlice) GetRandom() (index int64, element User) {
 	}
 
 	index = rand.Int63n(int64(len(s.slice)))
+
+	element = s.slice[index]
+
+	return index, element
+}
+
+func (s *SafeUserSlice) GetKindaRandom() (index int, element User) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.slice) == 0 {
+		return
+	}
+
+	numElements := len(s.slice)
+
+	// 80% chance of selecting first 20% of elements
+	if rand.Intn(100) < 80 {
+
+		// 80% chance of selecting first 4% of elements
+		if rand.Intn(100) < 80 {
+			index = rand.Intn(numElements / 25)
+		} else {
+			index = rand.Intn(numElements / 5)
+		}
+
+	} else {
+		index = rand.Intn(numElements)
+	}
 
 	element = s.slice[index]
 
@@ -89,7 +118,7 @@ ORDER BY
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rows, err := m.DB.QueryContext(ctx, query)
+	rows, err := m.ReadDb.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("error running query: %v", err)
 	}
@@ -157,7 +186,7 @@ ORDER BY
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rows, err := m.DB.QueryContext(ctx, query)
+	rows, err := m.ReadDb.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("error running query: %v", err)
 	}
@@ -221,7 +250,7 @@ func (m UserModel) GetForTokenMySQL(tokenHash []byte) ([]*User, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	rows, err := m.DB.QueryContext(ctx, query, tokenHash)
+	rows, err := m.ReadDb.QueryContext(ctx, query, tokenHash)
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +298,7 @@ func (m UserModel) GetForTokenPostgreSQL(tokenHash []byte) ([]*User, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	rows, err := m.DB.QueryContext(ctx, query, tokenHash)
+	rows, err := m.ReadDb.QueryContext(ctx, query, tokenHash)
 	if err != nil {
 		return nil, err
 	}

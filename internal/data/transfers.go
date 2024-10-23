@@ -18,7 +18,8 @@ type Transfer struct {
 }
 
 type TransferModel struct {
-	DB *sql.DB
+	WriteDb *sql.DB
+	ReadDb  *sql.DB
 }
 
 func (m *TransferModel) TransferFunds(transfer *Transfer, engine string) (*Transfer, error) {
@@ -47,7 +48,7 @@ func (m *TransferModel) TransferFundsMySQL(transfer *Transfer) (*Transfer, error
 	defer cancel()
 
 	// Execute the stored procedure
-	err := m.DB.QueryRowContext(ctx, query, args...).Scan(&transfer.ID)
+	err := m.WriteDb.QueryRowContext(ctx, query, args...).Scan(&transfer.ID)
 	if err != nil {
 		fmt.Printf("error transferring funds -> %v\n", err)
 		return nil, err
@@ -80,7 +81,7 @@ func (m *TransferModel) TransferFundsPostgreSQL(transfer *Transfer) (*Transfer, 
 	defer cancel()
 
 	var transferID int64
-	err := m.DB.QueryRowContext(ctx, query, args...).Scan(&transferID)
+	err := m.WriteDb.QueryRowContext(ctx, query, args...).Scan(&transferID)
 	if err != nil {
 		fmt.Printf("Error transferring funds -> %v\n", err)
 		return nil, err
@@ -108,7 +109,7 @@ func (m *TransferModel) DeletePostgreSQL(transferId int64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	_, err := m.DB.ExecContext(ctx, query, transferId)
+	_, err := m.WriteDb.ExecContext(ctx, query, transferId)
 	if err != nil {
 		fmt.Printf("Error deleting transfer -> %v\n", err)
 		return err
@@ -126,7 +127,7 @@ func (m *TransferModel) DeleteMySQL(transferId int64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	_, err := m.DB.ExecContext(ctx, query, transferId)
+	_, err := m.WriteDb.ExecContext(ctx, query, transferId)
 	if err != nil {
 		fmt.Printf("Error deleting transfer -> %v\n", err)
 		return err
