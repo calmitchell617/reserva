@@ -44,6 +44,11 @@ deploy/postgresql:
 prepare/postgresql:
 	psql ${POSTGRESQL_SETUP_DSN} -f migrations/postgresql_init.sql
 
+## prepare/alloydb: prepare a postgresql db for benchmarking
+.PHONY: prepare/alloydb
+prepare/alloydb:
+	psql ${ALLOYDB_SETUP_DSN} -f migrations/postgresql_init.sql
+
 # ----------------------------------------------
 # mariadb
 # ----------------------------------------------
@@ -80,3 +85,13 @@ prepare/mysql:
 .PHONY: prepare/all
 prepare/all:
 	time bash -c "psql ${POSTGRESQL_SETUP_DSN} -q -f migrations/postgresql_init.sql & mysql -h ${MARIADB_HOSTNAME} -P 3306 -u root -p${MARIADB_PASSWORD} mysql < migrations/mysql_init.sql & mysql -h ${MYSQL_HOSTNAME} -P 3306 -u root -p${MYSQL_PASSWORD} mysql < migrations/mysql_init.sql & wait"
+
+## prepare/pg-and-alloy: 
+.PHONY: prepare/pg-and-alloy
+prepare/pg-and-alloy:
+	time bash -c "psql ${POSTGRESQL_SETUP_DSN} -q -f migrations/postgresql_init.sql & psql ${ALLOYDB_SETUP_DSN} -q -f migrations/postgresql_init.sql & wait"
+
+## benchmark/pg-and-alloy: benchmark pg and alloy
+.PHONY: benchmark/pg-and-alloy
+benchmark/pg-and-alloy: build/reserva
+	bash -c "go run ./cmd/reserva -db-dsn=${POSTGRESQL_BENCHMARK_DSN} -engine=postgresql & go run ./cmd/reserva -db-dsn=${ALLOYDB_BENCHMARK_DSN} -engine=postgresql -name=alloydb & wait"

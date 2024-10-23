@@ -21,7 +21,8 @@ import (
 )
 
 type config struct {
-	db struct {
+	name string
+	db   struct {
 		dsn          string
 		maxOpenConns int
 		maxIdleConns int
@@ -41,6 +42,7 @@ func main() {
 	var cfg config
 
 	flag.StringVar(&cfg.db.dsn, "db-dsn", "", "PostgreSQL DSN")
+	flag.StringVar(&cfg.name, "name", "", "Name of system")
 
 	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "PostgreSQL max open connections")
 	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "PostgreSQL max idle connections")
@@ -59,6 +61,10 @@ func main() {
 	if cfg.db.engine == "" {
 		logger.Error("engine is required")
 		os.Exit(1)
+	}
+
+	if cfg.name == "" {
+		cfg.name = cfg.db.engine
 	}
 
 	db, err := openDB(cfg)
@@ -95,7 +101,7 @@ func main() {
 		slice: make([]int64, 0),
 	}
 
-	logger.Info(fmt.Sprintf("Starting test of %v", cfg.db.engine))
+	logger.Info(fmt.Sprintf("Starting test of %v", cfg.name))
 
 	lastTransferCheckTime := time.Now()
 	var lastTransferPlusDeletes int32 = 0
@@ -104,7 +110,7 @@ func main() {
 
 		if time.Since(lastTransferCheckTime) > 10*time.Second {
 			transferPlusDeletes := atomic.LoadInt32(&transferCounter) + atomic.LoadInt32(&deleteCounter)
-			logger.Info(fmt.Sprintf("%v completing %.0f transfers plus deletes per second", cfg.db.engine, float64(transferPlusDeletes-lastTransferPlusDeletes)/time.Since(lastTransferCheckTime).Seconds()))
+			logger.Info(fmt.Sprintf("%v completing %.0f transfers plus deletes per second", cfg.name, float64(transferPlusDeletes-lastTransferPlusDeletes)/time.Since(lastTransferCheckTime).Seconds()))
 			lastTransferCheckTime = time.Now()
 			lastTransferPlusDeletes = transferPlusDeletes
 		}
