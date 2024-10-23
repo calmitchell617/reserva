@@ -55,7 +55,7 @@ func main() {
 
 	flag.StringVar(&cfg.db.engine, "engine", "", "Database engine")
 
-	flag.DurationVar(&cfg.duration, "duration", 2*time.Hour, "Test duration")
+	flag.DurationVar(&cfg.duration, "duration", 5*time.Hour, "Test duration")
 	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 25, "Concurrency limit")
 	flag.BoolVar(&cfg.deletes, "deletes", true, "Perform deletes during benchmark")
 
@@ -75,7 +75,6 @@ func main() {
 	cfg.db.hasReadReplica = true
 
 	if cfg.db.readDsn == "" {
-		cfg.db.readDsn = cfg.db.writeDsn
 		cfg.db.hasReadReplica = false
 	}
 

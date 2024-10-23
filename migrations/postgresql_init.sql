@@ -168,3 +168,14 @@ SELECT
 FROM
     tokens;
 
+-- insert a million random transfers
+-- insert into transfers (card_id, from_account_id, to_account_id, requesting_user_id, amount, created_at)
+-- select
+--     floor(1 + random() * 1000000)::int,
+--     floor(1 + random() * 1000000)::int,
+--     floor(1 + random() * 1000000)::int,
+--     floor(1 + random() * 10)::int,
+--     floor(1 + random() * 100)::int,
+--     now() - interval '1 year' * random()
+-- from
+--     generate_series(1, 10000000);
