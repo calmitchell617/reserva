@@ -12,22 +12,22 @@ build/reserva:
 ## benchmark/postgresql: benchmark a postgresql db
 .PHONY: benchmark/postgresql
 benchmark/postgresql: build/reserva
-	go run ./cmd/reserva -db-dsn=${POSTGRESQL_BENCHMARK_DSN} -engine=postgresql
+	go run ./cmd/reserva -write-dsn=${POSTGRESQL_BENCHMARK_DSN} -engine=postgresql
 
 ## benchmark/mariadb: benchmark a mariadb db
 .PHONY: benchmark/mariadb
 benchmark/mariadb: build/reserva
-	go run ./cmd/reserva -db-dsn=${MARIADB_BENCHMARK_DSN} -engine=mariadb
+	go run ./cmd/reserva -write-dsn=${MARIADB_BENCHMARK_DSN} -engine=mariadb
 
 ## benchmark/mysql: benchmark a mysql db
 .PHONY: benchmark/mysql
 benchmark/mysql: build/reserva
-	go run ./cmd/reserva -db-dsn=${MYSQL_BENCHMARK_DSN} -engine=mysql
+	go run ./cmd/reserva -write-dsn=${MYSQL_BENCHMARK_DSN} -engine=mysql
 
 ## benchmark/all: benchmark all dem docker dbs
 .PHONY: benchmark/all
 benchmark/all: build/reserva
-	bash -c "go run ./cmd/reserva -db-dsn=${MYSQL_BENCHMARK_DSN} -engine=mysql & go run ./cmd/reserva -db-dsn=${POSTGRESQL_BENCHMARK_DSN} -engine=postgresql & go run ./cmd/reserva -db-dsn=${MARIADB_BENCHMARK_DSN} -engine=mariadb & wait"
+	bash -c "go run ./cmd/reserva -write-dsn=${MYSQL_BENCHMARK_DSN} -engine=mysql & go run ./cmd/reserva -write-dsn=${POSTGRESQL_BENCHMARK_DSN} -engine=postgresql & go run ./cmd/reserva -write-dsn=${MARIADB_BENCHMARK_DSN} -engine=mariadb & wait"
 
 # ----------------------------------------------
 # postgresql
@@ -37,12 +37,17 @@ benchmark/all: build/reserva
 .PHONY: deploy/postgresql
 deploy/postgresql:
 	docker rm -f postgresql || true
-	docker run --name postgresql -v ./config/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf -e POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD} --platform linux/amd64 -p 5432:5432 -d postgres:17.0-bookworm  -c 'config_file=/etc/postgresql/postgresql.conf'
+	docker run --name postgresql -v ./config/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf -e POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD} --platform linux/arm64 -p 5432:5432 -d postgres:17.0-bookworm  -c 'config_file=/etc/postgresql/postgresql.conf'
 
 ## prepare/postgresql: prepare a postgresql db for benchmarking
 .PHONY: prepare/postgresql
 prepare/postgresql:
-	psql ${POSTGRESQL_SETUP_DSN} -f migrations/postgresql_init.sql
+	time psql ${POSTGRESQL_SETUP_DSN} -f migrations/postgresql_init.sql
+
+## prepare/optimized-postgresql: prepare a postgresql db for benchmarking
+.PHONY: prepare/optimized-postgresql
+prepare/optimized-postgresql:
+	time psql ${POSTGRESQL_SETUP_DSN} -f migrations/postgresql_init_optimized.sql
 
 ## prepare/alloydb: prepare a postgresql db for benchmarking
 .PHONY: prepare/alloydb
