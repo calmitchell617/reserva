@@ -37,7 +37,7 @@ benchmark/all: build/reserva
 .PHONY: deploy/postgresql
 deploy/postgresql:
 	docker rm -f postgresql || true
-	docker run --name postgresql -v ./config/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf -e POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD} --platform linux/arm64 -p 5432:5432 -d postgres:17.0-bookworm  -c 'config_file=/etc/postgresql/postgresql.conf'
+	docker run --name postgresql -v ./config/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf -e POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD} --platform linux/amd64 -p 5432:5432 -d postgres:17.0-bookworm  -c 'config_file=/etc/postgresql/postgresql.conf'
 
 ## prepare/postgresql: prepare a postgresql db for benchmarking
 .PHONY: prepare/postgresql

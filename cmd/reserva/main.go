@@ -26,8 +26,6 @@ type config struct {
 		readDsn        string
 		writeDsn       string
 		hasReadReplica bool
-		maxOpenConns   int
-		maxIdleConns   int
 		maxIdleTime    time.Duration
 		engine         string
 	}
@@ -48,15 +46,12 @@ func main() {
 	flag.StringVar(&cfg.db.writeDsn, "write-dsn", "", "Write DSN")
 	flag.StringVar(&cfg.db.readDsn, "read-dsn", "", "Read DSN")
 
-	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "Max open connections")
-	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "Max idle connections")
-
 	flag.DurationVar(&cfg.db.maxIdleTime, "db-max-idle-time", 15*time.Minute, "Max DB connection idle time")
 
 	flag.StringVar(&cfg.db.engine, "engine", "", "Database engine")
 
 	flag.DurationVar(&cfg.duration, "duration", 5*time.Hour, "Test duration")
-	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 25, "Concurrency limit")
+	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 64, "Concurrency limit")
 	flag.BoolVar(&cfg.deletes, "deletes", true, "Perform deletes during benchmark")
 
 	flag.Parse()
@@ -322,8 +317,8 @@ func openDB(cfg config) (writeDb *sql.DB, readDb *sql.DB, err error) {
 		return nil, nil, err
 	}
 
-	writeDb.SetMaxOpenConns(cfg.db.maxOpenConns)
-	writeDb.SetMaxIdleConns(cfg.db.maxIdleConns)
+	writeDb.SetMaxOpenConns(cfg.concurrencyLimit)
+	writeDb.SetMaxIdleConns(cfg.concurrencyLimit)
 	writeDb.SetConnMaxIdleTime(cfg.db.maxIdleTime)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -343,8 +338,8 @@ func openDB(cfg config) (writeDb *sql.DB, readDb *sql.DB, err error) {
 			return nil, nil, err
 		}
 
-		readDb.SetMaxOpenConns(cfg.db.maxOpenConns)
-		readDb.SetMaxIdleConns(cfg.db.maxIdleConns)
+		readDb.SetMaxOpenConns(cfg.concurrencyLimit)
+		readDb.SetMaxIdleConns(cfg.concurrencyLimit)
 		readDb.SetConnMaxIdleTime(cfg.db.maxIdleTime)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

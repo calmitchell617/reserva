@@ -6,7 +6,7 @@ CREATE DATABASE reserva;
 
 -- switch to reserva db
 \c reserva;
--- vacuum full;
+vacuum full;
 
 CREATE UNLOGGED TABLE IF NOT EXISTS organizations(
     id smallserial PRIMARY KEY
@@ -89,9 +89,9 @@ SET synchronous_commit TO OFF;
 
 DO $$
 DECLARE
-    num_organizations INT := 20;
-    num_accounts INT := 5000000;
-    num_transfers INT := 10000000;
+    num_organizations INT := 50;
+    num_accounts INT := 1000000;
+    num_transfers INT := 1000000;
 BEGIN
 
 SET CONSTRAINTS ALL DEFERRED;
@@ -159,7 +159,7 @@ select
     floor(1 + random() * 100)::int,
     now() - interval '1 year' * random()
 from
-    generate_series(1, 10000000);
+    generate_series(1, num_transfers);
 
 
 SET CONSTRAINTS ALL IMMEDIATE;
