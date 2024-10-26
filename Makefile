@@ -62,12 +62,12 @@ prepare/alloydb:
 .PHONY: deploy/mariadb
 deploy/mariadb:
 	docker rm -f mariadb || true
-	docker run --name mariadb -v ./config/mariadb/1.cnf:/etc/mysql/conf.d/1.cnf -e MYSQL_ROOT_PASSWORD=${MARIADB_PASSWORD} --platform linux/amd64 -p 3306:3306 -d mariadb:11.5.2-noble
+	docker run --name mariadb -v ./config/mariadb/1.cnf:/etc/mysql/conf.d/1.cnf -e MYSQL_ROOT_PASSWORD=${MARIADB_PASSWORD} --platform linux/arm64 -p 3306:3306 -d mariadb:11.5.2-noble
 
 ## prepare/mariadb: prepare a mariadb db for benchmarking
 .PHONY: prepare/mariadb
 prepare/mariadb:
-	mysql -h ${MARIADB_HOSTNAME} -P 3306 -u root -p${MARIADB_PASSWORD} mysql < migrations/mysql_init.sql
+	time mariadb -h ${MARIADB_HOSTNAME} -P 3306 -u root -p${MARIADB_PASSWORD} mysql < migrations/mysql_init.sql
 
 # ----------------------------------------------
 # mysql

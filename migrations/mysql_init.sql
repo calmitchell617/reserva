@@ -1,4 +1,6 @@
--- DB TYPE: MYSQL
+SET @num_orgs = 50;
+SET @num_accounts = 1000000;
+SET @num_transfers = 10000000;
 
 USE mysql;
 
@@ -17,8 +19,8 @@ CREATE TABLE IF NOT EXISTS organizations (
 CREATE TABLE IF NOT EXISTS users (
     id SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     organization_id SMALLINT UNSIGNED NOT NULL,
-    frozen BOOLEAN NOT NULL,
-    CONSTRAINT fk_users_organization_id FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE
+    frozen BOOLEAN NOT NULL
+    -- CONSTRAINT fk_users_organization_id FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS permissions (
@@ -30,8 +32,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     organization_id SMALLINT UNSIGNED NOT NULL,
     balance BIGINT NOT NULL CHECK (balance >= 0),
-    frozen BOOLEAN NOT NULL,
-    CONSTRAINT fk_accounts_organization_id FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE
+    frozen BOOLEAN NOT NULL
+    -- CONSTRAINT fk_accounts_organization_id FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS cards (
@@ -39,8 +41,8 @@ CREATE TABLE IF NOT EXISTS cards (
     account_id INT UNSIGNED NOT NULL,
     expiration_date DATE NOT NULL,
     security_code SMALLINT UNSIGNED NOT NULL,
-    frozen BOOLEAN NOT NULL,
-    CONSTRAINT fk_cards_account_id FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE
+    frozen BOOLEAN NOT NULL
+    -- CONSTRAINT fk_cards_account_id FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS transfers (
@@ -50,11 +52,11 @@ CREATE TABLE IF NOT EXISTS transfers (
     to_account_id INT UNSIGNED NOT NULL,
     requesting_user_id SMALLINT UNSIGNED NOT NULL,
     amount BIGINT NOT NULL,
-    created_at TIMESTAMP NOT NULL,
-    CONSTRAINT fk_transfers_card_id FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE,
-    CONSTRAINT fk_transfers_from_account_id FOREIGN KEY (from_account_id) REFERENCES accounts (id) ON DELETE CASCADE,
-    CONSTRAINT fk_transfers_to_account_id FOREIGN KEY (to_account_id) REFERENCES accounts (id) ON DELETE CASCADE,
-    CONSTRAINT fk_transfers_requesting_user_id FOREIGN KEY (requesting_user_id) REFERENCES users (id) ON DELETE CASCADE
+    created_at TIMESTAMP NOT NULL
+    -- CONSTRAINT fk_transfers_card_id FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE,
+    -- CONSTRAINT fk_transfers_from_account_id FOREIGN KEY (from_account_id) REFERENCES accounts (id) ON DELETE CASCADE,
+    -- CONSTRAINT fk_transfers_to_account_id FOREIGN KEY (to_account_id) REFERENCES accounts (id) ON DELETE CASCADE,
+    -- CONSTRAINT fk_transfers_requesting_user_id FOREIGN KEY (requesting_user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS tokens (
@@ -62,9 +64,9 @@ CREATE TABLE IF NOT EXISTS tokens (
     permission_id SMALLINT UNSIGNED NOT NULL,
     user_id SMALLINT UNSIGNED NOT NULL,
     expires_at TIMESTAMP NOT NULL,
-    PRIMARY KEY (hash, permission_id),
-    CONSTRAINT fk_tokens_permission_id FOREIGN KEY (permission_id) REFERENCES permissions (id) ON DELETE CASCADE,
-    CONSTRAINT fk_tokens_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    PRIMARY KEY (hash, permission_id)
+    -- CONSTRAINT fk_tokens_permission_id FOREIGN KEY (permission_id) REFERENCES permissions (id) ON DELETE CASCADE,
+    -- CONSTRAINT fk_tokens_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
 DELIMITER //
@@ -123,12 +125,16 @@ BEGIN
     COMMIT;
 END //
 
+START TRANSACTION;
+
+SET FOREIGN_KEY_CHECKS=0;
+
 
 CREATE PROCEDURE InsertOrganizations()
 BEGIN
     DECLARE counter INT DEFAULT 1;
 
-    WHILE counter <= 10 DO
+    WHILE counter <= @num_orgs DO
         INSERT INTO organizations (id) VALUES (counter);
         SET counter = counter + 1;
     END WHILE;
@@ -140,7 +146,7 @@ CREATE PROCEDURE InsertAccounts()
 BEGIN
     DECLARE counter INT DEFAULT 1;
 
-    WHILE counter <= 1000000 DO
+    WHILE counter <= @num_accounts DO
         INSERT INTO accounts (id, organization_id, balance, frozen) VALUES
         (counter, FLOOR(1 + RAND() * 10), 1000000000, FALSE),
         (counter+1, FLOOR(1 + RAND() * 10), 1000000000, FALSE),
@@ -252,7 +258,7 @@ CREATE PROCEDURE InsertUsers()
 BEGIN
     DECLARE counter INT DEFAULT 1;
 
-    WHILE counter <= 10 DO
+    WHILE counter <= @num_orgs DO
         INSERT INTO users (id, organization_id, frozen) VALUES (counter, counter, FALSE);
         SET counter = counter + 1;
     END WHILE;
@@ -268,7 +274,7 @@ CREATE PROCEDURE InsertCards()
 BEGIN
     DECLARE counter BIGINT DEFAULT 1;
 
-    WHILE counter <= 1000000 DO
+    WHILE counter <= @num_accounts DO
         INSERT INTO cards (id, account_id, expiration_date, security_code, frozen) VALUES
         (counter, counter, DATE_ADD(NOW(), INTERVAL 1 YEAR), FLOOR(100 + RAND() * 900), FALSE),
         (counter+1, counter+1, DATE_ADD(NOW(), INTERVAL 1 YEAR), FLOOR(100 + RAND() * 900), FALSE),
@@ -378,3 +384,43 @@ CALL InsertCards()//
 
 INSERT INTO tokens (user_id, permission_id, expires_at) SELECT id, 1, DATE_ADD(NOW(), INTERVAL 1 YEAR) FROM users//
 INSERT INTO tokens (hash, user_id, permission_id, expires_at) SELECT hash, user_id, 2, expires_at FROM tokens//
+
+SET FOREIGN_KEY_CHECKS=1;
+
+-- Commit the transaction
+COMMIT;
+
+-- Add the foreign key constraints
+ALTER TABLE users
+    ADD CONSTRAINT fk_users_organization_id FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE;
+
+ALTER TABLE accounts
+    ADD CONSTRAINT fk_accounts_organization_id FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE;
+
+ALTER TABLE cards
+    ADD CONSTRAINT fk_cards_account_id FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE;
+
+ALTER TABLE transfers
+    ADD CONSTRAINT fk_transfers_card_id FOREIGN KEY (card_id) REFERENCES cards (id) ON DELETE CASCADE,
+    ADD CONSTRAINT fk_transfers_from_account_id FOREIGN KEY (from_account_id) REFERENCES accounts (id) ON DELETE CASCADE,
+    ADD CONSTRAINT fk_transfers_to_account_id FOREIGN KEY (to_account_id) REFERENCES accounts (id) ON DELETE CASCADE,
+    ADD CONSTRAINT fk_transfers_requesting_user_id FOREIGN KEY (requesting_user_id) REFERENCES users (id) ON DELETE CASCADE;
+
+ALTER TABLE tokens
+    ADD CONSTRAINT fk_tokens_permission_id FOREIGN KEY (permission_id) REFERENCES permissions (id) ON DELETE CASCADE,
+    ADD CONSTRAINT fk_tokens_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE;
+
+
+-- Create indexes on foreign key columns to improve performance
+CREATE INDEX idx_users_organization_id ON users (organization_id);
+CREATE INDEX idx_accounts_organization_id ON accounts (organization_id);
+CREATE INDEX idx_cards_account_id ON cards (account_id);
+CREATE INDEX idx_transfers_card_id ON transfers (card_id);
+CREATE INDEX idx_transfers_from_account_id ON transfers (from_account_id);
+CREATE INDEX idx_transfers_to_account_id ON transfers (to_account_id);
+CREATE INDEX idx_transfers_requesting_user_id ON transfers (requesting_user_id);
+CREATE INDEX idx_tokens_permission_id ON tokens (permission_id);
+CREATE INDEX idx_tokens_user_id ON tokens (user_id);
+
+-- Create unique index on permissions.name
+CREATE UNIQUE INDEX idx_permissions_name ON permissions (name);
