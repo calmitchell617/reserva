@@ -89,9 +89,9 @@ SET synchronous_commit TO OFF;
 
 DO $$
 DECLARE
-    num_organizations INT := 50;
-    num_accounts INT := 1000000;
-    num_transfers INT := 1000000;
+    num_organizations INT := 100;
+    num_accounts INT := 30000000;
+    num_transfers INT := 1000000000;
 BEGIN
 
 SET CONSTRAINTS ALL DEFERRED;
