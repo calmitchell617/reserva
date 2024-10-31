@@ -19,8 +19,9 @@ type User struct {
 }
 
 type UserModel struct {
-	WriteDb *sql.DB
-	ReadDb  *sql.DB
+	WriteDb      *sql.DB
+	ReadDb       *sql.DB
+	QueryTimeout time.Duration
 }
 
 type SafeUserSlice struct {
@@ -247,7 +248,7 @@ func (m UserModel) GetForTokenMySQL(tokenHash []byte) ([]*User, error) {
 
 	var users []*User
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), m.QueryTimeout)
 	defer cancel()
 
 	rows, err := m.ReadDb.QueryContext(ctx, query, tokenHash)
@@ -295,7 +296,7 @@ func (m UserModel) GetForTokenPostgreSQL(tokenHash []byte) ([]*User, error) {
 
 	var users []*User
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), m.QueryTimeout)
 	defer cancel()
 
 	rows, err := m.ReadDb.QueryContext(ctx, query, tokenHash)

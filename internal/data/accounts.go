@@ -15,8 +15,9 @@ type Account struct {
 }
 
 type AccountModel struct {
-	WriteDB *sql.DB
-	ReadDb  *sql.DB
+	WriteDB      *sql.DB
+	ReadDb       *sql.DB
+	QueryTimeout time.Duration
 }
 
 func (m AccountModel) GetFromCard(card *Card, engine string) (*Account, *Card, error) {
@@ -39,7 +40,7 @@ func (m AccountModel) GetFromCardMySQL(card *Card) (*Account, *Card, error) {
 
 	var account Account
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), m.QueryTimeout)
 	defer cancel()
 
 	err := m.ReadDb.QueryRowContext(ctx, query, card.ID).Scan(
@@ -75,7 +76,7 @@ func (m AccountModel) GetFromCardPostgreSQL(card *Card) (*Account, *Card, error)
 
 	var account Account
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), m.QueryTimeout)
 	defer cancel()
 
 	err := m.ReadDb.QueryRowContext(ctx, query, card.ID).Scan(

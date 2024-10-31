@@ -14,6 +14,7 @@ type Card struct {
 }
 
 type CardModel struct {
-	WriteDb *sql.DB
-	ReadDb  *sql.DB
+	WriteDb      *sql.DB
+	ReadDb       *sql.DB
+	QueryTimeout time.Duration
 }

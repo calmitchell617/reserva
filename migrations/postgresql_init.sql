@@ -89,9 +89,9 @@ SET synchronous_commit TO OFF;
 
 DO $$
 DECLARE
-    num_organizations INT := 100;
-    num_accounts INT := 30000000;
-    num_transfers INT := 1000000000;
+    num_organizations INT := 50;
+    num_accounts INT :=  1000000;
+    -- num_transfers INT := 1000000;
 BEGIN
 
 SET CONSTRAINTS ALL DEFERRED;
@@ -150,16 +150,16 @@ SELECT
 FROM
     tokens;
 
-insert into transfers (card_id, from_account_id, to_account_id, requesting_user_id, amount, created_at)
-select
-    ceil(random() * num_accounts)::int,
-    ceil(random() * num_accounts)::int,
-    ceil(random() * num_accounts)::int,
-    ceil(random() * num_organizations)::int,
-    floor(1 + random() * 100)::int,
-    now() - interval '1 year' * random()
-from
-    generate_series(1, num_transfers);
+-- insert into transfers (card_id, from_account_id, to_account_id, requesting_user_id, amount, created_at)
+-- select
+--     ceil(random() * num_accounts)::int,
+--     ceil(random() * num_accounts)::int,
+--     ceil(random() * num_accounts)::int,
+--     ceil(random() * num_organizations)::int,
+--     floor(1 + random() * 100)::int,
+--     now() - interval '1 year' * random()
+-- from
+--     generate_series(1, num_transfers);
 
 
 SET CONSTRAINTS ALL IMMEDIATE;

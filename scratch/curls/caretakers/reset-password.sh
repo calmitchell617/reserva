@@ -1,1 +1,0 @@
-curl -X PUT -d '{"password": "Mypass123!", "token": "QHUZJAN3NDN2PCJ62URAAWE7O4"}' localhost:4000/api/v1/users/password

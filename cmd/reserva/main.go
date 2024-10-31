@@ -28,14 +28,17 @@ type config struct {
 		hasReadReplica bool
 		maxIdleTime    time.Duration
 		engine         string
+		queryTimeout   time.Duration
 	}
 	duration         time.Duration
 	concurrencyLimit int
 	deletes          bool
+	kindaRandom      bool
 }
 
 type application struct {
-	models data.Models
+	models       data.Models
+	queryTimeout time.Duration
 }
 
 func main() {
@@ -48,11 +51,14 @@ func main() {
 
 	flag.DurationVar(&cfg.db.maxIdleTime, "db-max-idle-time", 15*time.Minute, "Max DB connection idle time")
 
+	flag.DurationVar(&cfg.db.queryTimeout, "queryTimeout", 1*time.Minute, "Max DB query time")
+
 	flag.StringVar(&cfg.db.engine, "engine", "", "Database engine")
 
-	flag.DurationVar(&cfg.duration, "duration", 5*time.Hour, "Test duration")
+	flag.DurationVar(&cfg.duration, "duration", 63*time.Minute, "Test duration")
 	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 64, "Concurrency limit")
 	flag.BoolVar(&cfg.deletes, "deletes", true, "Perform deletes during benchmark")
+	flag.BoolVar(&cfg.kindaRandom, "kinda-random", false, "make user selection kinda random")
 
 	flag.Parse()
 
@@ -86,7 +92,8 @@ func main() {
 	logger.Info("database connection pool established")
 
 	app := &application{
-		models: data.NewModels(writeDb, readDb),
+		models:       data.NewModels(writeDb, readDb, cfg.db.queryTimeout),
+		queryTimeout: cfg.db.queryTimeout,
 	}
 
 	users, err := app.models.Users.GetAll(cfg.db.engine)
@@ -106,8 +113,8 @@ func main() {
 	var transferCounter int32
 	var deleteCounter int32
 
-	transferIds := &SafeInt64Slice{
-		slice: make([]int64, 0),
+	transferIds := &SafeInt64Map{
+		valMap: make(map[int64]bool, 0),
 	}
 
 	logger.Info(fmt.Sprintf("Starting test of %v", cfg.name))
@@ -117,9 +124,9 @@ func main() {
 
 	for time.Since(start) < cfg.duration {
 
-		if time.Since(lastTransferCheckTime) > 10*time.Second {
+		if time.Since(lastTransferCheckTime) > 3*time.Second {
 			transferPlusDeletes := atomic.LoadInt32(&transferCounter) + atomic.LoadInt32(&deleteCounter)
-			logger.Info(fmt.Sprintf("%v completing %.0f transfers plus deletes per second", cfg.name, float64(transferPlusDeletes-lastTransferPlusDeletes)/time.Since(lastTransferCheckTime).Seconds()))
+			logger.Info(fmt.Sprintf("%v completing %.0f actions per second", cfg.name, float64(transferPlusDeletes-lastTransferPlusDeletes)/time.Since(lastTransferCheckTime).Seconds()))
 			lastTransferCheckTime = time.Now()
 			lastTransferPlusDeletes = transferPlusDeletes
 		}
@@ -129,10 +136,19 @@ func main() {
 			// get a random amount
 			amount := rand.Int63n(1000)
 
+			var acquiringUserChoice data.User
+			var issuingUserChoice data.User
+
 			// get two random users
-			_, acquiringUserChoice := users.GetKindaRandom()
+			if cfg.kindaRandom {
+				_, acquiringUserChoice = users.GetKindaRandom()
+				_, issuingUserChoice = users.GetKindaRandom()
+			} else {
+				_, acquiringUserChoice = users.GetRandom()
+				_, issuingUserChoice = users.GetRandom()
+			}
+
 			acquiringAccountID := acquiringUserChoice.AccountID
-			_, issuingUserChoice := users.GetKindaRandom()
 
 			// ensure the users are different
 			if acquiringUserChoice.ID == issuingUserChoice.ID {
@@ -142,8 +158,9 @@ func main() {
 			// get acquiring user and check permission with token
 			users, err := app.models.Users.GetForToken(acquiringUserChoice.Token.Hash, cfg.db.engine)
 			if err != nil {
-				err = fmt.Errorf("error getting user -> %w", err)
-				logger.Error(err.Error())
+				// err = fmt.Errorf("error getting user -> %w", err)
+				// logger.Error(err.Error())
+				time.Sleep(time.Second)
 				return err
 			}
 
@@ -252,7 +269,7 @@ func main() {
 				CreatedAt:      time.Now(),
 			}
 
-			transfer, err = app.models.Transfers.TransferFunds(transfer, cfg.db.engine)
+			_, err = app.models.Transfers.TransferFunds(transfer, cfg.db.engine)
 			if err != nil {
 				err = fmt.Errorf("error transferring funds -> %w", err)
 				logger.Error(err.Error())
@@ -265,7 +282,7 @@ func main() {
 				transferIds.Add(transfer.ID)
 
 				if transferCounter != 0 && transferCounter%20 == 0 {
-					toDeleteIdx, toDeleteElement, err := transferIds.GetRandom()
+					toDeleteElement, err := transferIds.GetRandom()
 					if err != nil {
 						err = fmt.Errorf("error getting random transfer -> %w", err)
 						logger.Error(err.Error())
@@ -277,7 +294,9 @@ func main() {
 						logger.Error(err.Error())
 						return err
 					}
-					transferIds.Remove(toDeleteIdx)
+
+					transferIds.Remove(toDeleteElement)
+
 					atomic.AddInt32(&deleteCounter, 1)
 				}
 			}
@@ -292,11 +311,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	if cfg.deletes {
-		logger.Info(fmt.Sprintf("%v completed %v transfers and %v deletes in %v, rate of %.0f per second", cfg.db.engine, transferCounter, deleteCounter, cfg.duration, float64(transferCounter+deleteCounter)/time.Since(start).Seconds()))
-	} else {
-		logger.Info(fmt.Sprintf("%v completed %v transfers in %v, rate of %.0f per second", cfg.db.engine, transferCounter, cfg.duration, float64(transferCounter)/time.Since(start).Seconds()))
-	}
+	totalActions := transferCounter + deleteCounter
+
+	logger.Info(fmt.Sprintf("%v completed %v actions in %v, rate of %.0f per second", cfg.name, totalActions, cfg.duration, float64(totalActions)/time.Since(start).Seconds()))
 }
 
 func openDB(cfg config) (writeDb *sql.DB, readDb *sql.DB, err error) {

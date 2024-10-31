@@ -1,6 +1,6 @@
-SET @num_orgs = 50;
+SET @num_orgs = 20;
 SET @num_accounts = 1000000;
-SET @num_transfers = 10000000;
+SET @num_transfers = 1000000;
 
 USE mysql;
 

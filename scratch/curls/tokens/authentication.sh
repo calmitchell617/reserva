@@ -1,1 +1,0 @@
-curl -d '{"email": "myemail@example.com", "password": "Mypass123!"}' localhost:4000/api/v1/tokens/authentication

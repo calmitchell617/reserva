@@ -18,8 +18,9 @@ type Transfer struct {
 }
 
 type TransferModel struct {
-	WriteDb *sql.DB
-	ReadDb  *sql.DB
+	WriteDb      *sql.DB
+	ReadDb       *sql.DB
+	QueryTimeout time.Duration
 }
 
 func (m *TransferModel) TransferFunds(transfer *Transfer, engine string) (*Transfer, error) {
@@ -44,7 +45,7 @@ func (m *TransferModel) TransferFundsMySQL(transfer *Transfer) (*Transfer, error
 		transfer.CreatedAt,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), m.QueryTimeout)
 	defer cancel()
 
 	// Execute the stored procedure
@@ -77,7 +78,7 @@ func (m *TransferModel) TransferFundsPostgreSQL(transfer *Transfer) (*Transfer, 
 		transfer.CreatedAt,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), m.QueryTimeout)
 	defer cancel()
 
 	var transferID int64
@@ -106,7 +107,7 @@ func (m *TransferModel) DeletePostgreSQL(transferId int64) error {
 		WHERE id = $1
 	`
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), m.QueryTimeout)
 	defer cancel()
 
 	_, err := m.WriteDb.ExecContext(ctx, query, transferId)
@@ -124,7 +125,7 @@ func (m *TransferModel) DeleteMySQL(transferId int64) error {
 		WHERE id = ?
 	`
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), m.QueryTimeout)
 	defer cancel()
 
 	_, err := m.WriteDb.ExecContext(ctx, query, transferId)

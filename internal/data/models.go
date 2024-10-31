@@ -3,6 +3,7 @@ package data
 import (
 	"database/sql"
 	"errors"
+	"time"
 )
 
 var (
@@ -17,23 +18,27 @@ type Models struct {
 	Users     UserModel
 }
 
-func NewModels(writeDb *sql.DB, readDb *sql.DB) Models {
+func NewModels(writeDb *sql.DB, readDb *sql.DB, queryTimeout time.Duration) Models {
 	return Models{
 		Accounts: AccountModel{
-			WriteDB: writeDb,
-			ReadDb:  readDb,
+			WriteDB:      writeDb,
+			ReadDb:       readDb,
+			QueryTimeout: queryTimeout,
 		},
 		Cards: CardModel{
-			WriteDb: writeDb,
-			ReadDb:  readDb,
+			WriteDb:      writeDb,
+			ReadDb:       readDb,
+			QueryTimeout: queryTimeout,
 		},
 		Transfers: TransferModel{
-			WriteDb: writeDb,
-			ReadDb:  readDb,
+			WriteDb:      writeDb,
+			ReadDb:       readDb,
+			QueryTimeout: queryTimeout,
 		},
 		Users: UserModel{
-			WriteDb: writeDb,
-			ReadDb:  readDb,
+			WriteDb:      writeDb,
+			ReadDb:       readDb,
+			QueryTimeout: queryTimeout,
 		},
 	}
 }
