@@ -37,10 +37,13 @@ benchmark/all: build/reserva
 .PHONY: deploy/postgresql
 deploy/postgresql:
 	-docker rm -f postgresql
-	docker run --name postgresql -v ./config/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf -e POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD} --platform linux/amd64 -p 5432:5432 -d postgres:17.0-bookworm  -c 'config_file=/etc/postgresql/postgresql.conf'
+	docker run --name postgresql -v ./config/postgresql.conf:/etc/postgresql/postgresql.conf -e POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD} --platform linux/amd64 -p 5432:5432 -d postgres:17.0-bookworm  -c 'config_file=/etc/postgresql/postgresql.conf'
 
-## docker run --device-read-iops /dev/nvme0n1p2:1000 --device-write-iops /dev/nvme0n1p2:1000 --name postgresql -v ./config/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf -e POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD} --platform linux/amd64 -p 5432:5432 -d postgres:17.0-bookworm  -c 'config_file=/etc/postgresql/postgresql.conf'
-
+## deploy/postgresql-16: create a postgresql docker container
+.PHONY: deploy/postgresql-16
+deploy/postgresql-16:
+	-docker rm -f postgresql
+	docker run --name postgresql -v ./config/postgresql.conf:/etc/postgresql/postgresql.conf -e POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD} --platform linux/amd64 -p 5432:5432 -d postgres:16.4-bookworm  -c 'config_file=/etc/postgresql/postgresql.conf'
 
 ## prepare/postgresql: prepare a postgresql db for benchmarking
 .PHONY: prepare/postgresql
@@ -65,7 +68,7 @@ prepare/alloydb:
 .PHONY: deploy/mariadb
 deploy/mariadb:
 	docker rm -f mariadb || true
-	docker run --name mariadb -v ./config/mariadb/mariadb.cnf:/etc/mysql/conf.d/mariadb.cnf -e MYSQL_ROOT_PASSWORD=${MARIADB_PASSWORD} --platform linux/amd64 -p 3306:3306 -d mariadb:11.5.2-noble
+	docker run --name mariadb -v ./config/mariadb.cnf:/etc/mysql/conf.d/mariadb.cnf -e MYSQL_ROOT_PASSWORD=${MARIADB_PASSWORD} --platform linux/amd64 -p 3306:3306 -d mariadb:11.5.2-noble
 
 ## prepare/mariadb: prepare a mariadb db for benchmarking
 .PHONY: prepare/mariadb
@@ -80,7 +83,13 @@ prepare/mariadb:
 .PHONY: deploy/mysql
 deploy/mysql:
 	docker rm -f mysql || true
-	docker run --name mysql -v ./config/mysql/my.cnf:/etc/mysql/conf.d/my.cnf -e MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD} --platform linux/amd64 -p 3306:3306 -d mysql:9.1.0-oraclelinux9
+	docker run --name mysql -v ./config/my.cnf:/etc/mysql/conf.d/my.cnf -e MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD} --platform linux/amd64 -p 3306:3306 -d mysql:9.1.0-oraclelinux9
+
+## deploy/mysql-8: create a mysql docker container
+.PHONY: deploy/mysql-8
+deploy/mysql-8:
+	docker rm -f mysql || true
+	docker run --name mysql -v ./config/my.cnf:/etc/mysql/conf.d/my.cnf -e MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD} --platform linux/amd64 -p 3306:3306 -d mysql:8.4.3-oraclelinux9
 
 ## prepare/mysql: prepare a mysql db for benchmarking
 .PHONY: prepare/mysql
