@@ -63,18 +63,17 @@ CREATE OR REPLACE FUNCTION transfer_funds(p_card_id bigint, p_from_account_id in
 DECLARE
     v_transfer_id int;
 BEGIN
+
     UPDATE
         accounts
     SET
-        balance = balance - p_amount
+        balance = CASE
+                    WHEN id = p_from_account_id THEN balance - p_amount
+                    WHEN id = p_to_account_id THEN balance + p_amount
+                END
     WHERE
-        id = p_from_account_id;
-    UPDATE
-        accounts
-    SET
-        balance = balance + p_amount
-    WHERE
-        id = p_to_account_id;
+        id IN (p_from_account_id, p_to_account_id);
+
     
     INSERT INTO transfers(card_id, from_account_id, to_account_id, requesting_user_id, amount, created_at)
         VALUES (p_card_id, p_from_account_id, p_to_account_id, p_requesting_user_id, p_amount, p_created_at)
@@ -89,9 +88,9 @@ SET synchronous_commit TO OFF;
 
 DO $$
 DECLARE
-    num_organizations INT := 50;
-    num_accounts INT :=  1000000;
-    -- num_transfers INT := 1000000;
+    num_organizations INT := 100;
+    num_accounts INT := 10000000;
+    num_transfers INT := 100000000;
 BEGIN
 
 SET CONSTRAINTS ALL DEFERRED;

@@ -1,4 +1,4 @@
-SET @num_orgs = 50;
+SET @num_orgs = 100;
 SET @num_accounts = 1000000;
 
 USE mysql;
@@ -81,23 +81,19 @@ CREATE PROCEDURE transfer_funds(
 BEGIN
     DECLARE exit handler FOR SQLEXCEPTION
     BEGIN
-        -- Rollback in case of an error
         ROLLBACK;
-        -- SET v_transfer_id = -1;
     END;
 
     -- Start transaction
     START TRANSACTION;
 
-    -- Update the balance for the from_account
     UPDATE accounts
-    SET balance = balance - p_amount
-    WHERE id = p_from_account_id;
+    SET balance = CASE 
+                    WHEN id = p_from_account_id THEN balance - p_amount
+                    WHEN id = p_to_account_id THEN balance + p_amount
+                END
+    WHERE id IN (p_from_account_id, p_to_account_id);
 
-    -- Update the balance for the to_account
-    UPDATE accounts
-    SET balance = balance + p_amount
-    WHERE id = p_to_account_id;
 
     -- Insert into the transfers table and get the last insert ID
     INSERT INTO transfers (
