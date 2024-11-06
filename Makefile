@@ -39,6 +39,9 @@ deploy/postgresql:
 	docker rm -f postgresql || true
 	docker run --name postgresql -v ./config/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf -e POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD} --platform linux/amd64 -p 5432:5432 -d postgres:17.0-bookworm  -c 'config_file=/etc/postgresql/postgresql.conf'
 
+## docker run --device-read-iops /dev/nvme0n1p2:1000 --device-write-iops /dev/nvme0n1p2:1000 --name postgresql -v ./config/postgresql/postgresql.conf:/etc/postgresql/postgresql.conf -e POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD} --platform linux/amd64 -p 5432:5432 -d postgres:17.0-bookworm  -c 'config_file=/etc/postgresql/postgresql.conf'
+
+
 ## prepare/postgresql: prepare a postgresql db for benchmarking
 .PHONY: prepare/postgresql
 prepare/postgresql:
