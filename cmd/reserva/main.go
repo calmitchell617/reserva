@@ -55,7 +55,7 @@ func main() {
 
 	flag.StringVar(&cfg.db.engine, "engine", "", "Database engine")
 
-	flag.DurationVar(&cfg.duration, "duration", 63*time.Minute, "Test duration")
+	flag.DurationVar(&cfg.duration, "duration", 123*time.Minute, "Test duration")
 	flag.IntVar(&cfg.concurrencyLimit, "concurrency-limit", 64, "Concurrency limit")
 	flag.BoolVar(&cfg.deletes, "deletes", true, "Perform deletes during benchmark")
 	flag.BoolVar(&cfg.kindaRandom, "kinda-random", false, "make user selection kinda random")

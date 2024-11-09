@@ -1,4 +1,4 @@
-SET @num_orgs = 100;
+SET @num_orgs = 50;
 SET @num_accounts = 1000000;
 
 USE mysql;
